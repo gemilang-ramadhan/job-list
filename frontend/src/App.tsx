@@ -9,7 +9,14 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { faGoogle } from "@fortawesome/free-brands-svg-icons";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import AdminDashboard from "./components/AdminDashboard";
+
+const ADMIN_CREDENTIAL = {
+  email: "admin@gmail.com",
+  password: "admin",
+};
+const ADMIN_SESSION_KEY = "jobby-admin-session";
 
 function App() {
   // isPasswordMode controls whether the password-login fields are visible
@@ -20,7 +27,40 @@ function App() {
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [isSent, setIsSent] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedSession = window.localStorage.getItem(ADMIN_SESSION_KEY);
+    if (storedSession === "true") {
+      setIsAdmin(true);
+    }
+  }, []);
+
+  if (isAdmin) {
+    return (
+      <AdminDashboard
+        onLogout={() => {
+          setIsAdmin(false);
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem(ADMIN_SESSION_KEY);
+          }
+          setIsPasswordMode(false);
+          setIsRegisterMode(false);
+          setIsForgotPassword(false);
+          setShowPassword(false);
+          setEmail("");
+          setEmailError("");
+          setPassword("");
+          setPasswordError("");
+          setIsSent(false);
+        }}
+      />
+    );
+  }
 
   if (isSent) {
     return (
@@ -52,6 +92,12 @@ function App() {
               setIsForgotPassword(false);
               setIsRegisterMode(false);
               setIsPasswordMode(false);
+              // clear inputs and errors when leaving the sent screen
+              setEmail("");
+              setEmailError("");
+              setPassword("");
+              setPasswordError("");
+              setShowPassword(false);
             }}
             className="w-full rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-800 shadow hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
           >
@@ -76,7 +122,18 @@ function App() {
           <div className="mt-8 space-y-2">
             {isForgotPassword && (
               <button
-                onClick={() => setIsForgotPassword(false)}
+                onClick={() => {
+                  // leaving forgot-password flow -> clear inputs/errors
+                  setIsForgotPassword(false);
+                  setEmail("");
+                  setEmailError("");
+                  setPassword("");
+                  setPasswordError("");
+                  setShowPassword(false);
+                  setIsPasswordMode(false);
+                  setIsRegisterMode(false);
+                  setIsSent(false);
+                }}
                 className="flex items-center gap-2 text-sm font-medium text-sky-500 hover:text-sky-600 -ml-1 mb-4"
               >
                 <FontAwesomeIcon icon={faArrowLeft} className="h-4 w-4" />
@@ -107,6 +164,13 @@ function App() {
                         setIsRegisterMode(false);
                         setIsPasswordMode(false);
                         setIsForgotPassword(false);
+                        // clear typed inputs and errors when switching
+                        setEmail("");
+                        setEmailError("");
+                        setPassword("");
+                        setPasswordError("");
+                        setShowPassword(false);
+                        setIsSent(false);
                       }}
                       className="font-medium text-sky-500 hover:text-sky-600"
                     >
@@ -123,6 +187,13 @@ function App() {
                         setIsRegisterMode(true);
                         setIsPasswordMode(false);
                         setIsForgotPassword(false);
+                        // clear typed inputs and errors when switching
+                        setEmail("");
+                        setEmailError("");
+                        setPassword("");
+                        setPasswordError("");
+                        setShowPassword(false);
+                        setIsSent(false);
                       }}
                       className="font-medium text-sky-500 hover:text-sky-600"
                     >
@@ -184,8 +255,21 @@ function App() {
                     <div className="relative mt-2">
                       <input
                         type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (passwordError) setPasswordError("");
+                        }}
                         placeholder="••••••••"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-12 text-slate-900 shadow-inner transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                        aria-invalid={!!passwordError}
+                        aria-describedby={
+                          passwordError ? "password-error" : undefined
+                        }
+                        className={`w-full rounded-xl bg-white px-4 py-3 pr-12 text-slate-900 shadow-inner transition focus:outline-none focus:ring-2 ${
+                          passwordError
+                            ? "border border-red-400 focus:border-red-400 focus:ring-red-100"
+                            : "border border-slate-200 focus:border-sky-400 focus:ring-sky-200"
+                        }`}
                       />
                       <button
                         type="button"
@@ -198,6 +282,18 @@ function App() {
                         />
                       </button>
                     </div>
+                    {passwordError && (
+                      <p
+                        id="password-error"
+                        className="mt-2 flex items-center gap-2 text-sm text-red-600"
+                      >
+                        <FontAwesomeIcon
+                          icon={faExclamationTriangle}
+                          className="h-4 w-4"
+                        />
+                        {passwordError}
+                      </p>
+                    )}
                   </label>
 
                   <div className="text-right">
@@ -208,6 +304,13 @@ function App() {
                         setIsForgotPassword(true);
                         setIsPasswordMode(false);
                         setIsRegisterMode(false);
+                        // clear typed inputs and errors when switching
+                        setEmail("");
+                        setEmailError("");
+                        setPassword("");
+                        setPasswordError("");
+                        setShowPassword(false);
+                        setIsSent(false);
                       }}
                       className="text-sm font-medium text-sky-500 hover:text-sky-600"
                     >
@@ -229,8 +332,29 @@ function App() {
 
                 // If in password-login mode, do not trigger the sent confirmation (placeholder)
                 if (isPasswordMode) {
-                  // Placeholder: handle password login flow here instead of showing email-sent card.
-                  console.log("password login flow - not sending magic link");
+                  if (!password.trim()) {
+                    setPasswordError("Kata sandi tidak boleh kosong");
+                    return;
+                  }
+
+                  if (
+                    email.trim().toLowerCase() ===
+                      ADMIN_CREDENTIAL.email.toLowerCase() &&
+                    password === ADMIN_CREDENTIAL.password
+                  ) {
+                    if (typeof window !== "undefined") {
+                      window.localStorage.setItem(ADMIN_SESSION_KEY, "true");
+                    }
+                    setEmail("");
+                    setEmailError("");
+                    setPassword("");
+                    setPasswordError("");
+                    setShowPassword(false);
+                    setIsAdmin(true);
+                    return;
+                  }
+
+                  setPasswordError("Email atau kata sandi salah");
                   return;
                 }
 
@@ -281,9 +405,16 @@ function App() {
                       <div className="overflow-hidden">
                         <ButtonWithIcon
                           onClick={() => {
+                            // Toggle password-login mode and clear any typed inputs/errors
                             setIsPasswordMode((s) => !s);
                             setIsForgotPassword(false);
                             setIsRegisterMode(false);
+                            setEmail("");
+                            setEmailError("");
+                            setPassword("");
+                            setPasswordError("");
+                            setShowPassword(false);
+                            setIsSent(false);
                           }}
                           icon={
                             isPasswordMode ? (
