@@ -1,21 +1,57 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { DraftJob, FieldRequirement, ProfileField } from "../types/jobs";
+import {
+  JOB_DRAFT_STORAGE_KEY,
+  getDefaultProfileFields,
+  parseDraftJobs,
+} from "../types/jobs";
 
 type JobOpeningModalProps = {
   isOpen: boolean;
+  initialDraft?: DraftJob | null;
   onClose: () => void;
+  onDraftSaved?: (draft: DraftJob) => void;
+  onDraftDeleted?: (draftId: string) => void;
 };
 
-type FieldRequirement = "Mandatory" | "Optional" | "Off";
-
-type ProfileField = {
-  key: string;
-  label: string;
-  requirement: FieldRequirement;
+type FormSnapshot = {
+  jobName: string;
+  jobType: string;
+  jobDescription: string;
+  candidatesNeeded: string;
+  minSalary: string;
+  maxSalary: string;
+  profileRequirements: FieldRequirement[];
 };
 
-function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
+const readDraftsFromStorage = (): DraftJob[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    return parseDraftJobs(window.localStorage.getItem(JOB_DRAFT_STORAGE_KEY));
+  } catch (error) {
+    console.error("Failed to read drafts from storage", error);
+    return [];
+  }
+};
+
+const writeDraftsToStorage = (drafts: DraftJob[]) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(JOB_DRAFT_STORAGE_KEY, JSON.stringify(drafts));
+  } catch (error) {
+    console.error("Failed to write drafts to storage", error);
+  }
+};
+
+function JobOpeningModal({
+  isOpen,
+  initialDraft = null,
+  onClose,
+  onDraftSaved,
+  onDraftDeleted,
+}: JobOpeningModalProps) {
   const [jobName, setJobName] = useState("");
   const [jobType, setJobType] = useState("");
   const [isJobTypeOpen, setIsJobTypeOpen] = useState(false);
@@ -23,40 +59,232 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
   const [candidatesNeeded, setCandidatesNeeded] = useState("");
   const [minSalary, setMinSalary] = useState("");
   const [maxSalary, setMaxSalary] = useState("");
-
-  const [profileFields, setProfileFields] = useState<ProfileField[]>([
-    { key: "full_name", label: "Full name", requirement: "Mandatory" },
-    { key: "photo_profile", label: "Photo Profile", requirement: "Mandatory" },
-    { key: "gender", label: "Gender", requirement: "Mandatory" },
-    { key: "domicile", label: "Domicile", requirement: "Mandatory" },
-    { key: "email", label: "Email", requirement: "Mandatory" },
-    { key: "phone_number", label: "Phone number", requirement: "Mandatory" },
-    { key: "linkedin_link", label: "LinkedIn link", requirement: "Mandatory" },
-    { key: "date_of_birth", label: "Date of birth", requirement: "Mandatory" },
-  ]);
+  const defaultProfileFieldsRef = useRef<ProfileField[]>(
+    getDefaultProfileFields()
+  );
+  const [profileFields, setProfileFields] = useState<ProfileField[]>(() =>
+    defaultProfileFieldsRef.current.map((field) => ({ ...field }))
+  );
+  const snapshotRef = useRef<FormSnapshot>({
+    jobName: "",
+    jobType: "",
+    jobDescription: "",
+    candidatesNeeded: "",
+    minSalary: "",
+    maxSalary: "",
+    profileRequirements: defaultProfileFieldsRef.current.map(
+      (field) => field.requirement
+    ),
+  });
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const jobTypeDropdownRef = useRef<HTMLDivElement | null>(null);
   const jobTypeOptions = [
     { value: "full-time", label: "Full Time" },
     { value: "part-time", label: "Part Time" },
     { value: "contract", label: "Contract" },
     { value: "internship", label: "Internship" },
   ];
-  const jobTypeDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const isEditingDraft = Boolean(initialDraft);
+  const editingDraftId = initialDraft?.id ?? null;
+
+  const generateDraftId = (date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+    const random = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, "0");
+    return `job_${year}${month}${day}_${random}`;
+  };
+
+  const applyInitialState = (draft: DraftJob | null) => {
+    const hydratedProfileFields =
+      draft?.profileFields?.length && draft.profileFields
+        ? draft.profileFields.map((field) => ({ ...field }))
+        : defaultProfileFieldsRef.current.map((field) => ({ ...field }));
+
+    setProfileFields(hydratedProfileFields);
+    setJobName(draft?.formValues.jobName ?? "");
+    setJobType(draft?.formValues.jobType ?? "");
+    setJobDescription(draft?.formValues.jobDescription ?? "");
+    setCandidatesNeeded(draft?.formValues.candidatesNeeded ?? "");
+    setMinSalary(draft?.formValues.minSalary ?? "");
+    setMaxSalary(draft?.formValues.maxSalary ?? "");
+    setIsJobTypeOpen(false);
+
+    snapshotRef.current = {
+      jobName: (draft?.formValues.jobName ?? "").trim(),
+      jobType: (draft?.formValues.jobType ?? "").trim(),
+      jobDescription: (draft?.formValues.jobDescription ?? "").trim(),
+      candidatesNeeded: (draft?.formValues.candidatesNeeded ?? "").trim(),
+      minSalary: (draft?.formValues.minSalary ?? "").trim(),
+      maxSalary: (draft?.formValues.maxSalary ?? "").trim(),
+      profileRequirements: hydratedProfileFields.map(
+        (field) => field.requirement
+      ),
+    };
+  };
+
+  const currentSnapshot: FormSnapshot = {
+    jobName: jobName.trim(),
+    jobType: jobType.trim(),
+    jobDescription: jobDescription.trim(),
+    candidatesNeeded: candidatesNeeded.trim(),
+    minSalary: minSalary.trim(),
+    maxSalary: maxSalary.trim(),
+    profileRequirements: profileFields.map((field) => field.requirement),
+  };
+
+  const hasUnsavedChanges = (() => {
+    const initial = snapshotRef.current;
+    if (!initial) return false;
+
+    if (
+      initial.jobName !== currentSnapshot.jobName ||
+      initial.jobType !== currentSnapshot.jobType ||
+      initial.jobDescription !== currentSnapshot.jobDescription ||
+      initial.candidatesNeeded !== currentSnapshot.candidatesNeeded ||
+      initial.minSalary !== currentSnapshot.minSalary ||
+      initial.maxSalary !== currentSnapshot.maxSalary
+    ) {
+      return true;
+    }
+
+    if (
+      initial.profileRequirements.length !==
+      currentSnapshot.profileRequirements.length
+    ) {
+      return true;
+    }
+
+    return initial.profileRequirements.some(
+      (requirement, index) =>
+        requirement !== currentSnapshot.profileRequirements[index]
+    );
+  })();
+
+  const buildDraftFormValues = (): DraftJob["formValues"] => {
+    const values: DraftJob["formValues"] = {};
+    if (currentSnapshot.jobName) values.jobName = currentSnapshot.jobName;
+    if (currentSnapshot.jobType) values.jobType = currentSnapshot.jobType;
+    if (currentSnapshot.jobDescription)
+      values.jobDescription = currentSnapshot.jobDescription;
+    if (currentSnapshot.candidatesNeeded)
+      values.candidatesNeeded = currentSnapshot.candidatesNeeded;
+    if (currentSnapshot.minSalary) values.minSalary = currentSnapshot.minSalary;
+    if (currentSnapshot.maxSalary) values.maxSalary = currentSnapshot.maxSalary;
+    return values;
+  };
+
+  const upsertDraftInStorage = (draft: DraftJob) => {
+    const existingDrafts = readDraftsFromStorage();
+    const filtered = existingDrafts.filter((item) => item.id !== draft.id);
+    writeDraftsToStorage([draft, ...filtered]);
+  };
+
+  const removeDraftFromStorage = (draftId: string) => {
+    const existingDrafts = readDraftsFromStorage();
+    const filtered = existingDrafts.filter((item) => item.id !== draftId);
+    writeDraftsToStorage(filtered);
+  };
+
+  const handleRequestClose = () => {
+    if (hasUnsavedChanges) {
+      setIsConfirmModalOpen(true);
+      return;
+    }
+    onClose();
+  };
+
+  const handleConfirmDiscard = () => {
+    setIsConfirmModalOpen(false);
+    applyInitialState(initialDraft ?? null);
+    onClose();
+  };
+
+  const handleConfirmSave = () => {
+    const now = new Date();
+    const draftId = editingDraftId ?? generateDraftId(now);
+    const draft: DraftJob = {
+      id: draftId,
+      status: "draft",
+      savedAt: now.toISOString(),
+      formValues: buildDraftFormValues(),
+      profileFields: profileFields.map((field) => ({ ...field })),
+    };
+
+    upsertDraftInStorage(draft);
+    snapshotRef.current = {
+      ...currentSnapshot,
+      profileRequirements: [...currentSnapshot.profileRequirements],
+    };
+    setIsConfirmModalOpen(false);
+    onDraftSaved?.(draft);
+    onClose();
+  };
+
+  const handleSaveDraftClick = () => {
+    const now = new Date();
+    const draftId = editingDraftId ?? generateDraftId(now);
+    const draft: DraftJob = {
+      id: draftId,
+      status: "draft",
+      savedAt: now.toISOString(),
+      formValues: buildDraftFormValues(),
+      profileFields: profileFields.map((field) => ({ ...field })),
+    };
+
+    upsertDraftInStorage(draft);
+    snapshotRef.current = {
+      ...currentSnapshot,
+      profileRequirements: [...currentSnapshot.profileRequirements],
+    };
+    onDraftSaved?.(draft);
+    onClose();
+  };
+
+  const handleDeleteDraftClick = () => {
+    if (!editingDraftId) return;
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!editingDraftId) return;
+    removeDraftFromStorage(editingDraftId);
+    onDraftDeleted?.(editingDraftId);
+    setIsDeleteConfirmOpen(false);
+    setIsConfirmModalOpen(false);
+    applyInitialState(null);
+    onClose();
+  };
+
+  const handleCancelDelete = () => {
+    setIsDeleteConfirmOpen(false);
+  };
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
+      applyInitialState(initialDraft ?? null);
+      setIsConfirmModalOpen(false);
+      setIsDeleteConfirmOpen(false);
     } else {
       document.body.style.overflow = "";
       setIsJobTypeOpen(false);
+      setIsConfirmModalOpen(false);
+      setIsDeleteConfirmOpen(false);
     }
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isOpen]);
+  }, [isOpen, initialDraft]);
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      onClose();
+  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      if (isConfirmModalOpen || isDeleteConfirmOpen) return;
+      handleRequestClose();
     }
   };
 
@@ -100,8 +328,7 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
         ? "cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-100"
         : currentRequirement === buttonRequirement
         ? "bg-sky-500 text-white"
-        : // For Optional and Off provide a slightly more defined border when not active
-        buttonRequirement === "Optional" || buttonRequirement === "Off"
+        : buttonRequirement === "Optional" || buttonRequirement === "Off"
         ? "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
         : "bg-white text-slate-600 hover:bg-slate-100"
     }`;
@@ -144,12 +371,13 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
       onClick={handleBackdropClick}
     >
       <div className="relative w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6">
-          <h2 className="text-xl font-semibold text-slate-900">Job Opening</h2>
+          <h2 className="text-xl font-semibold text-slate-900">
+            {isEditingDraft ? "Manage Draft Job" : "Job Opening"}
+          </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleRequestClose}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
             aria-label="Close modal"
           >
@@ -157,15 +385,10 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
           </button>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="max-h-[calc(90vh-180px)] overflow-y-auto custom-scrollbar px-8 py-6">
+        <div className="max-h-[calc(90vh-200px)] overflow-y-auto custom-scrollbar px-8 py-6">
           <div className="space-y-6">
-            {/* Job Name */}
             <div>
-              <label
-                htmlFor="jobName"
-                className="mb-2 block text-sm text-slate-700"
-              >
+              <label htmlFor="jobName" className="mb-2 block text-sm text-slate-700">
                 Job Name<span className="text-red-500">*</span>
               </label>
               <input
@@ -178,7 +401,6 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
               />
             </div>
 
-            {/* Job Type */}
             <div className="relative" ref={jobTypeDropdownRef}>
               <label className="mb-2 block text-sm text-slate-700">
                 Job Type<span className="text-red-500">*</span>
@@ -241,7 +463,6 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
               )}
             </div>
 
-            {/* Job Description */}
             <div>
               <label
                 htmlFor="jobDescription"
@@ -259,7 +480,6 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
               />
             </div>
 
-            {/* Number of Candidate Needed */}
             <div>
               <label
                 htmlFor="candidatesNeeded"
@@ -279,12 +499,11 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
               />
             </div>
 
-            {/* Job Salary */}
             <div>
               <label className="mb-3 block text-sm text-slate-700">
                 Job Salary
               </label>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label
                     htmlFor="minSalary"
@@ -330,7 +549,6 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
               </div>
             </div>
 
-            {/* Minimum Profile Information Required */}
             <div>
               <h3 className="mb-4 text-sm font-medium text-slate-700">
                 Minimum Profile Information Required
@@ -399,21 +617,114 @@ function JobOpeningModal({ isOpen, onClose }: JobOpeningModalProps) {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="border-t border-slate-100 px-8 py-6">
-          <button
-            type="button"
-            disabled={!isFormComplete}
-            className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-              isFormComplete
-                ? "bg-sky-500 text-white hover:bg-sky-600 focus-visible:outline-sky-500"
-                : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
-            }`}
-          >
-            Publish Job
-          </button>
+          {isEditingDraft ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+              <button
+                type="button"
+                onClick={handleDeleteDraftClick}
+                className="w-full rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-200 sm:w-auto"
+              >
+                Delete Draft
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDraftClick}
+                className="w-full rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 sm:w-auto"
+              >
+                Save Job
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={!isFormComplete}
+              className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                isFormComplete
+                  ? "bg-sky-500 text-white hover:bg-sky-600 focus-visible:outline-sky-500"
+                  : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
+              }`}
+            >
+              Publish Job
+            </button>
+          )}
         </div>
       </div>
+
+      {isConfirmModalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          onClick={handleConfirmDiscard}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_40px_90px_-60px_rgba(15,23,42,0.55)] transition-all duration-500 ease-in-out"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="px-6 py-6">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Save Draft
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                Do you want to save this as a draft?
+              </p>
+            </div>
+            <div className="flex items-center gap-3 border-t border-slate-100 px-6 py-4">
+              <button
+                type="button"
+                onClick={handleConfirmSave}
+                className="flex-1 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDiscard}
+                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-200"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDeleteConfirmOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          onClick={handleCancelDelete}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_40px_90px_-60px_rgba(15,23,42,0.55)] transition-all duration-500 ease-in-out"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="px-6 py-6">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Delete Draft
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                This draft will be removed permanently. Are you sure you want to
+                continue?
+              </p>
+            </div>
+            <div className="flex items-center gap-3 border-t border-slate-100 px-6 py-4">
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="flex-1 rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
+              >
+                Yes, delete
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelDelete}
+                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-200"
+              >
+                No, keep draft
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
