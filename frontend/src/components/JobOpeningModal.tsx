@@ -1,18 +1,18 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
 import { useEffect, useRef, useState } from "react";
-import type { DraftJob, FieldRequirement, ProfileField } from "../types/jobs";
+import type { StoredJob, FieldRequirement, ProfileField } from "../types/jobs";
 import {
   JOB_DRAFT_STORAGE_KEY,
   getDefaultProfileFields,
-  parseDraftJobs,
+  parseAllJobs,
 } from "../types/jobs";
 
 type JobOpeningModalProps = {
   isOpen: boolean;
-  initialDraft?: DraftJob | null;
+  initialDraft?: StoredJob | null;
   onClose: () => void;
-  onDraftSaved?: (draft: DraftJob) => void;
+  onDraftSaved?: (draft: StoredJob, options?: { isPublishingNew?: boolean }) => void;
   onDraftDeleted?: (draftId: string) => void;
 };
 
@@ -26,17 +26,18 @@ type FormSnapshot = {
   profileRequirements: FieldRequirement[];
 };
 
-const readDraftsFromStorage = (): DraftJob[] => {
+const readJobsFromStorage = (): StoredJob[] => {
   if (typeof window === "undefined") return [];
   try {
-    return parseDraftJobs(window.localStorage.getItem(JOB_DRAFT_STORAGE_KEY));
+    const storedValue = window.localStorage.getItem(JOB_DRAFT_STORAGE_KEY);
+    return parseAllJobs(storedValue);
   } catch (error) {
     console.error("Failed to read drafts from storage", error);
     return [];
   }
 };
 
-const writeDraftsToStorage = (drafts: DraftJob[]) => {
+const writeJobsToStorage = (drafts: StoredJob[]) => {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(JOB_DRAFT_STORAGE_KEY, JSON.stringify(drafts));
@@ -86,7 +87,8 @@ function JobOpeningModal({
     { value: "internship", label: "Internship" },
   ];
 
-  const isEditingDraft = Boolean(initialDraft);
+  const isEditingExisting = Boolean(initialDraft);
+  const isEditingActive = initialDraft?.status === "active";
   const editingDraftId = initialDraft?.id ?? null;
 
   const generateDraftId = (date: Date) => {
@@ -99,7 +101,7 @@ function JobOpeningModal({
     return `job_${year}${month}${day}_${random}`;
   };
 
-  const applyInitialState = (draft: DraftJob | null) => {
+  const applyInitialState = (draft: StoredJob | null) => {
     const hydratedProfileFields =
       draft?.profileFields?.length && draft.profileFields
         ? draft.profileFields.map((field) => ({ ...field }))
@@ -165,8 +167,8 @@ function JobOpeningModal({
     );
   })();
 
-  const buildDraftFormValues = (): DraftJob["formValues"] => {
-    const values: DraftJob["formValues"] = {};
+  const buildDraftFormValues = (): StoredJob["formValues"] => {
+    const values: StoredJob["formValues"] = {};
     if (currentSnapshot.jobName) values.jobName = currentSnapshot.jobName;
     if (currentSnapshot.jobType) values.jobType = currentSnapshot.jobType;
     if (currentSnapshot.jobDescription)
@@ -178,16 +180,16 @@ function JobOpeningModal({
     return values;
   };
 
-  const upsertDraftInStorage = (draft: DraftJob) => {
-    const existingDrafts = readDraftsFromStorage();
+  const upsertJobInStorage = (draft: StoredJob) => {
+    const existingDrafts = readJobsFromStorage();
     const filtered = existingDrafts.filter((item) => item.id !== draft.id);
-    writeDraftsToStorage([draft, ...filtered]);
+    writeJobsToStorage([draft, ...filtered]);
   };
 
-  const removeDraftFromStorage = (draftId: string) => {
-    const existingDrafts = readDraftsFromStorage();
+  const removeJobFromStorage = (draftId: string) => {
+    const existingDrafts = readJobsFromStorage();
     const filtered = existingDrafts.filter((item) => item.id !== draftId);
-    writeDraftsToStorage(filtered);
+    writeJobsToStorage(filtered);
   };
 
   const handleRequestClose = () => {
@@ -207,15 +209,20 @@ function JobOpeningModal({
   const handleConfirmSave = () => {
     const now = new Date();
     const draftId = editingDraftId ?? generateDraftId(now);
-    const draft: DraftJob = {
+    const status = initialDraft?.status ?? "draft";
+    const draft: StoredJob = {
       id: draftId,
-      status: "draft",
+      status,
       savedAt: now.toISOString(),
+      publishedAt:
+        status === "active"
+          ? initialDraft?.publishedAt ?? now.toISOString()
+          : undefined,
       formValues: buildDraftFormValues(),
       profileFields: profileFields.map((field) => ({ ...field })),
     };
 
-    upsertDraftInStorage(draft);
+    upsertJobInStorage(draft);
     snapshotRef.current = {
       ...currentSnapshot,
       profileRequirements: [...currentSnapshot.profileRequirements],
@@ -228,20 +235,47 @@ function JobOpeningModal({
   const handleSaveDraftClick = () => {
     const now = new Date();
     const draftId = editingDraftId ?? generateDraftId(now);
-    const draft: DraftJob = {
+    const status = initialDraft?.status ?? "draft";
+    const draft: StoredJob = {
       id: draftId,
-      status: "draft",
+      status,
       savedAt: now.toISOString(),
+      publishedAt:
+        status === "active"
+          ? initialDraft?.publishedAt ?? now.toISOString()
+          : undefined,
       formValues: buildDraftFormValues(),
       profileFields: profileFields.map((field) => ({ ...field })),
     };
 
-    upsertDraftInStorage(draft);
+    upsertJobInStorage(draft);
     snapshotRef.current = {
       ...currentSnapshot,
       profileRequirements: [...currentSnapshot.profileRequirements],
     };
     onDraftSaved?.(draft);
+    onClose();
+  };
+
+  const handlePublishJobClick = () => {
+    if (!isFormComplete) return;
+    const now = new Date();
+    const draftId = editingDraftId ?? generateDraftId(now);
+    const job: StoredJob = {
+      id: draftId,
+      status: "active",
+      savedAt: now.toISOString(),
+      publishedAt: now.toISOString(),
+      formValues: buildDraftFormValues(),
+      profileFields: profileFields.map((field) => ({ ...field })),
+    };
+
+    upsertJobInStorage(job);
+    snapshotRef.current = {
+      ...currentSnapshot,
+      profileRequirements: [...currentSnapshot.profileRequirements],
+    };
+    onDraftSaved?.(job, { isPublishingNew: true });
     onClose();
   };
 
@@ -252,7 +286,7 @@ function JobOpeningModal({
 
   const handleConfirmDelete = () => {
     if (!editingDraftId) return;
-    removeDraftFromStorage(editingDraftId);
+    removeJobFromStorage(editingDraftId);
     onDraftDeleted?.(editingDraftId);
     setIsDeleteConfirmOpen(false);
     setIsConfirmModalOpen(false);
@@ -373,7 +407,7 @@ function JobOpeningModal({
       <div className="relative w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6">
           <h2 className="text-xl font-semibold text-slate-900">
-            {isEditingDraft ? "Manage Draft Job" : "Job Opening"}
+            {isEditingExisting ? "Manage Job" : "Job Opening"}
           </h2>
           <button
             type="button"
@@ -618,27 +652,28 @@ function JobOpeningModal({
         </div>
 
         <div className="border-t border-slate-100 px-8 py-6">
-          {isEditingDraft ? (
+          {isEditingExisting ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
               <button
                 type="button"
                 onClick={handleDeleteDraftClick}
                 className="w-full rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-200 sm:w-auto"
               >
-                Delete Draft
+                {isEditingActive ? "Delete Job" : "Delete Draft"}
               </button>
               <button
                 type="button"
                 onClick={handleSaveDraftClick}
                 className="w-full rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 sm:w-auto"
               >
-                Save Job
+                {isEditingActive ? "Save Changes" : "Save Job"}
               </button>
             </div>
           ) : (
             <button
               type="button"
               disabled={!isFormComplete}
+              onClick={handlePublishJobClick}
               className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
                 isFormComplete
                   ? "bg-sky-500 text-white hover:bg-sky-600 focus-visible:outline-sky-500"
@@ -699,11 +734,12 @@ function JobOpeningModal({
           >
             <div className="px-6 py-6">
               <h3 className="text-lg font-semibold text-slate-900">
-                Delete Draft
+                {isEditingActive ? "Delete Job" : "Delete Draft"}
               </h3>
               <p className="mt-2 text-sm text-slate-500">
-                This draft will be removed permanently. Are you sure you want to
-                continue?
+                {isEditingActive
+                  ? "This job will be removed permanently. Are you sure you want to continue?"
+                  : "This draft will be removed permanently. Are you sure you want to continue?"}
               </p>
             </div>
             <div className="flex items-center gap-3 border-t border-slate-100 px-6 py-4">
@@ -719,7 +755,7 @@ function JobOpeningModal({
                 onClick={handleCancelDelete}
                 className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-200"
               >
-                No, keep draft
+                {isEditingActive ? "No, keep job" : "No, keep draft"}
               </button>
             </div>
           </div>

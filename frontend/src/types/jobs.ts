@@ -6,10 +6,13 @@ export type ProfileField = {
   requirement: FieldRequirement;
 };
 
-export type DraftJob = {
+export type JobStatus = "draft" | "active";
+
+export type StoredJob = {
   id: string;
-  status: "draft";
+  status: JobStatus;
   savedAt: string;
+  publishedAt?: string;
   formValues: {
     jobName?: string;
     jobType?: string;
@@ -34,7 +37,7 @@ export const getDefaultProfileFields = (): ProfileField[] => [
   { key: "date_of_birth", label: "Date of birth", requirement: "Mandatory" },
 ];
 
-export const parseDraftJobs = (value: string | null): DraftJob[] => {
+const parseJobs = (value: string | null): StoredJob[] => {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value);
@@ -42,10 +45,13 @@ export const parseDraftJobs = (value: string | null): DraftJob[] => {
       return [];
     }
     return parsed
-      .filter((item): item is DraftJob => {
+      .filter((item): item is StoredJob => {
         if (!item || typeof item !== "object") return false;
-        const candidate = item as DraftJob;
-        return typeof candidate.id === "string" && candidate.status === "draft";
+        const candidate = item as StoredJob;
+        return (
+          typeof candidate.id === "string" &&
+          (candidate.status === "draft" || candidate.status === "active")
+        );
       })
       .sort(
         (a, b) =>
@@ -55,4 +61,16 @@ export const parseDraftJobs = (value: string | null): DraftJob[] => {
     console.error("Failed to parse draft jobs", error);
     return [];
   }
+};
+
+export const parseDraftJobs = (value: string | null): StoredJob[] => {
+  return parseJobs(value).filter((job) => job.status === "draft");
+};
+
+export const parseActiveJobs = (value: string | null): StoredJob[] => {
+  return parseJobs(value).filter((job) => job.status === "active");
+};
+
+export const parseAllJobs = (value: string | null): StoredJob[] => {
+  return parseJobs(value);
 };
