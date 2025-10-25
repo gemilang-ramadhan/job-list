@@ -11,12 +11,29 @@ import { faGoogle } from "@fortawesome/free-brands-svg-icons";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import AdminDashboard from "./components/AdminDashboard";
+import UserDashboard from "./components/UserDashboard";
 
-const ADMIN_CREDENTIAL = {
-  email: "admin@gmail.com",
-  password: "admin",
-};
-const ADMIN_SESSION_KEY = "jobby-admin-session";
+const SESSION_STORAGE_KEY = "jobby-session-role";
+const LEGACY_ADMIN_SESSION_KEY = "jobby-admin-session";
+
+type SessionRole = "admin" | "user";
+
+const CREDENTIALS: Array<{
+  email: string;
+  password: string;
+  role: SessionRole;
+}> = [
+  {
+    email: "admin@gmail.com",
+    password: "admin",
+    role: "admin",
+  },
+  {
+    email: "user@gmail.com",
+    password: "user",
+    role: "user",
+  },
+];
 
 function App() {
   // isPasswordMode controls whether the password-login fields are visible
@@ -30,36 +47,65 @@ function App() {
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [isSent, setIsSent] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [sessionRole, setSessionRole] = useState<SessionRole | null>(null);
+  const resetAuthState = () => {
+    setIsPasswordMode(false);
+    setIsRegisterMode(false);
+    setIsForgotPassword(false);
+    setShowPassword(false);
+    setEmail("");
+    setEmailError("");
+    setPassword("");
+    setPasswordError("");
+    setIsSent(false);
+  };
+
+  const handleLogout = () => {
+    resetAuthState();
+    setSessionRole(null);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_ADMIN_SESSION_KEY);
+    }
+  };
+
+  const establishSession = (role: SessionRole) => {
+    setSessionRole(role);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, role);
+      window.localStorage.removeItem(LEGACY_ADMIN_SESSION_KEY);
+    }
+    resetAuthState();
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const storedSession = window.localStorage.getItem(ADMIN_SESSION_KEY);
-    if (storedSession === "true") {
-      setIsAdmin(true);
+    const storedRole = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (storedRole === "admin" || storedRole === "user") {
+      setSessionRole(storedRole);
+      return;
+    }
+
+    const legacySession = window.localStorage.getItem(
+      LEGACY_ADMIN_SESSION_KEY
+    );
+    if (legacySession === "true") {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, "admin");
+      window.localStorage.removeItem(LEGACY_ADMIN_SESSION_KEY);
+      setSessionRole("admin");
     }
   }, []);
 
-  if (isAdmin) {
+  if (sessionRole === "admin") {
     return (
       <AdminDashboard
-        onLogout={() => {
-          setIsAdmin(false);
-          if (typeof window !== "undefined") {
-            window.localStorage.removeItem(ADMIN_SESSION_KEY);
-          }
-          setIsPasswordMode(false);
-          setIsRegisterMode(false);
-          setIsForgotPassword(false);
-          setShowPassword(false);
-          setEmail("");
-          setEmailError("");
-          setPassword("");
-          setPasswordError("");
-          setIsSent(false);
-        }}
+        onLogout={handleLogout}
       />
     );
+  }
+
+  if (sessionRole === "user") {
+    return <UserDashboard onLogout={handleLogout} />;
   }
 
   if (isSent) {
@@ -337,20 +383,15 @@ function App() {
                     return;
                   }
 
-                  if (
-                    email.trim().toLowerCase() ===
-                      ADMIN_CREDENTIAL.email.toLowerCase() &&
-                    password === ADMIN_CREDENTIAL.password
-                  ) {
-                    if (typeof window !== "undefined") {
-                      window.localStorage.setItem(ADMIN_SESSION_KEY, "true");
-                    }
-                    setEmail("");
-                    setEmailError("");
-                    setPassword("");
-                    setPasswordError("");
-                    setShowPassword(false);
-                    setIsAdmin(true);
+                  const normalizedEmail = email.trim().toLowerCase();
+                  const matchingCredential = CREDENTIALS.find(
+                    (credential) =>
+                      credential.email.toLowerCase() === normalizedEmail &&
+                      credential.password === password
+                  );
+
+                  if (matchingCredential) {
+                    establishSession(matchingCredential.role);
                     return;
                   }
 
