@@ -10,7 +10,7 @@ type MockedJobModalProps = {
   onClose: () => void;
   onDraftSaved?: (
     draft: StoredJob,
-    options?: { isPublishingNew?: boolean }
+    options?: { isPublishingNew?: boolean; isActiveUpdate?: boolean }
   ) => void;
   onDraftDeleted?: (draftId: string) => void;
 };
@@ -170,6 +170,78 @@ describe("AdminDashboard", () => {
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("heading", { name: "Product Designer" })
+    ).toBeInTheDocument();
+  });
+
+  test("shows a success notification when an active job is updated", async () => {
+    window.localStorage.removeItem("jobDrafts");
+    renderDashboard();
+
+    const updatedJob = createStoredJob({
+      id: "job_active_5678",
+      status: "active",
+      savedAt: "2025-10-08T09:15:00.000Z",
+      publishedAt: "2025-10-05T09:15:00.000Z",
+      formValues: {
+        jobName: "UI Engineer",
+        jobType: "contract",
+        candidatesNeeded: "2",
+        minSalary: "6500000",
+        maxSalary: "7500000",
+      },
+    });
+
+    await act(async () => {
+      jobModalMock.latestProps?.onDraftSaved?.(updatedJob, {
+        isActiveUpdate: true,
+      });
+    });
+
+    expect(
+      await screen.findByText("Job details updated successfully")
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "UI Engineer" })
+    ).toBeInTheDocument();
+  });
+
+  test("moves an active job back to drafts when saved as draft", async () => {
+    const activeJob = createStoredJob({
+      id: "job_active_9999",
+      status: "active",
+      savedAt: "2025-10-03T07:00:00.000Z",
+      publishedAt: "2025-10-02T07:00:00.000Z",
+      formValues: {
+        jobName: "Security Analyst",
+        jobType: "full-time",
+        candidatesNeeded: "1",
+        minSalary: "8000000",
+        maxSalary: "9500000",
+      },
+    });
+    window.localStorage.setItem(
+      "jobDrafts",
+      JSON.stringify([activeJob])
+    );
+
+    renderDashboard();
+
+    expect(
+      screen.getByRole("heading", { name: "Security Analyst" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Active Jobs")).toBeInTheDocument();
+
+    await act(async () => {
+      jobModalMock.latestProps?.onDraftSaved?.(
+        { ...activeJob, status: "draft", publishedAt: undefined },
+        undefined
+      );
+    });
+
+    expect(screen.queryByText("Active Jobs")).not.toBeInTheDocument();
+    expect(screen.getByText("Draft Jobs")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Security Analyst" })
     ).toBeInTheDocument();
   });
 });

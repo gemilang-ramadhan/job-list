@@ -12,7 +12,10 @@ type JobOpeningModalProps = {
   isOpen: boolean;
   initialDraft?: StoredJob | null;
   onClose: () => void;
-  onDraftSaved?: (draft: StoredJob, options?: { isPublishingNew?: boolean }) => void;
+  onDraftSaved?: (
+    draft: StoredJob,
+    options?: { isPublishingNew?: boolean; isActiveUpdate?: boolean }
+  ) => void;
   onDraftDeleted?: (draftId: string) => void;
 };
 
@@ -206,66 +209,20 @@ function JobOpeningModal({
     onClose();
   };
 
-  const handleConfirmSave = () => {
-    const now = new Date();
-    const draftId = editingDraftId ?? generateDraftId(now);
-    const status = initialDraft?.status ?? "draft";
-    const draft: StoredJob = {
-      id: draftId,
-      status,
-      savedAt: now.toISOString(),
-      publishedAt:
-        status === "active"
-          ? initialDraft?.publishedAt ?? now.toISOString()
-          : undefined,
-      formValues: buildDraftFormValues(),
-      profileFields: profileFields.map((field) => ({ ...field })),
-    };
-
-    upsertJobInStorage(draft);
-    snapshotRef.current = {
-      ...currentSnapshot,
-      profileRequirements: [...currentSnapshot.profileRequirements],
-    };
-    setIsConfirmModalOpen(false);
-    onDraftSaved?.(draft);
-    onClose();
-  };
-
-  const handleSaveDraftClick = () => {
-    const now = new Date();
-    const draftId = editingDraftId ?? generateDraftId(now);
-    const status = initialDraft?.status ?? "draft";
-    const draft: StoredJob = {
-      id: draftId,
-      status,
-      savedAt: now.toISOString(),
-      publishedAt:
-        status === "active"
-          ? initialDraft?.publishedAt ?? now.toISOString()
-          : undefined,
-      formValues: buildDraftFormValues(),
-      profileFields: profileFields.map((field) => ({ ...field })),
-    };
-
-    upsertJobInStorage(draft);
-    snapshotRef.current = {
-      ...currentSnapshot,
-      profileRequirements: [...currentSnapshot.profileRequirements],
-    };
-    onDraftSaved?.(draft);
-    onClose();
-  };
-
-  const handlePublishJobClick = () => {
-    if (!isFormComplete) return;
+  const persistJob = (
+    status: StoredJob["status"],
+    options?: { onDraftSavedOptions?: { isPublishingNew?: boolean; isActiveUpdate?: boolean } }
+  ) => {
     const now = new Date();
     const draftId = editingDraftId ?? generateDraftId(now);
     const job: StoredJob = {
       id: draftId,
-      status: "active",
+      status,
       savedAt: now.toISOString(),
-      publishedAt: now.toISOString(),
+      publishedAt:
+        status === "active"
+          ? initialDraft?.publishedAt ?? now.toISOString()
+          : undefined,
       formValues: buildDraftFormValues(),
       profileFields: profileFields.map((field) => ({ ...field })),
     };
@@ -275,7 +232,45 @@ function JobOpeningModal({
       ...currentSnapshot,
       profileRequirements: [...currentSnapshot.profileRequirements],
     };
-    onDraftSaved?.(job, { isPublishingNew: true });
+    onDraftSaved?.(job, options?.onDraftSavedOptions);
+    return job;
+  };
+
+  const handleConfirmSave = () => {
+    const status = initialDraft?.status ?? "draft";
+    persistJob(status, {
+      onDraftSavedOptions:
+        status === "active" && isFormComplete
+          ? { isActiveUpdate: true }
+          : undefined,
+    });
+    setIsConfirmModalOpen(false);
+    onClose();
+  };
+
+  const handleSaveDraftClick = () => {
+    persistJob("draft");
+    onClose();
+  };
+
+  const handleSaveAsDraftClick = () => {
+    persistJob("draft");
+    onClose();
+  };
+
+  const handlePublishJobClick = () => {
+    if (!isFormComplete) return;
+    persistJob("active", {
+      onDraftSavedOptions: { isPublishingNew: true },
+    });
+    onClose();
+  };
+
+  const handleSaveActiveChangesClick = () => {
+    if (!isFormComplete) return;
+    persistJob("active", {
+      onDraftSavedOptions: { isActiveUpdate: true },
+    });
     onClose();
   };
 
@@ -663,11 +658,38 @@ function JobOpeningModal({
               </button>
               <button
                 type="button"
-                onClick={handleSaveDraftClick}
-                className="w-full rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 sm:w-auto"
+                onClick={isEditingActive ? handleSaveAsDraftClick : handleSaveDraftClick}
+                className="w-full rounded-xl bg-amber-400 px-6 py-3 text-sm font-semibold text-slate-800 shadow transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 sm:w-auto"
               >
-                {isEditingActive ? "Save Changes" : "Save Job"}
+                {isEditingActive ? "Save As Draft" : "Save Draft"}
               </button>
+              {isEditingActive ? (
+                <button
+                  type="button"
+                  disabled={!isFormComplete}
+                  onClick={handleSaveActiveChangesClick}
+                  className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto sm:min-w-[180px] ${
+                    isFormComplete
+                      ? "bg-sky-500 text-white shadow hover:bg-sky-600 focus-visible:outline-sky-500"
+                      : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
+                  }`}
+                >
+                  Save Changes
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!isFormComplete}
+                  onClick={handlePublishJobClick}
+                  className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto sm:min-w-[180px] ${
+                    isFormComplete
+                      ? "bg-sky-500 text-white shadow hover:bg-sky-600 focus-visible:outline-sky-500"
+                      : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
+                  }`}
+                >
+                  Publish Job
+                </button>
+              )}
             </div>
           ) : (
             <button

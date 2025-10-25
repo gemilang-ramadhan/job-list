@@ -111,7 +111,7 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const handleJobPersisted = (
     job: StoredJob,
-    options?: { isPublishingNew?: boolean }
+    options?: { isPublishingNew?: boolean; isActiveUpdate?: boolean }
   ) => {
     setDraftJobs((prev) => {
       const filtered = prev.filter((item) => item.id !== job.id);
@@ -122,6 +122,18 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
       return job.status === "active" ? [job, ...filtered] : filtered;
     });
     setSelectedJob((prev) => (prev && prev.id === job.id ? job : prev));
+
+    if (job.status === "active" && options?.isActiveUpdate) {
+      const nextKey = Date.now();
+      notificationKeyRef.current = nextKey;
+      setNotification({
+        key: nextKey,
+        message: "Job details updated successfully",
+        variant: "success",
+      });
+      setIsNotificationOpen(true);
+      return;
+    }
 
     if (job.status === "active" && options?.isPublishingNew) {
       const nextKey = Date.now();
