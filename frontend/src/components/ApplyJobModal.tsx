@@ -126,6 +126,7 @@ function ApplyJobModal({
   const [formState, setFormState] = useState<ApplyFormState>(initialFormState);
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_OPTIONS[0]);
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
   const [selectedDomicile, setSelectedDomicile] = useState(DOMICILE_OPTIONS[0]);
   const [isDomicileDropdownOpen, setIsDomicileDropdownOpen] = useState(false);
   const [isDobPickerOpen, setIsDobPickerOpen] = useState(false);
@@ -177,6 +178,7 @@ function ApplyJobModal({
     if (isOpen) {
       setFormState(initialFormState);
       setSelectedCountry(COUNTRY_OPTIONS[0]);
+      setCountrySearch("");
       setSelectedDomicile(DOMICILE_OPTIONS[0]);
       setIsCountryDropdownOpen(false);
       setIsDomicileDropdownOpen(false);
@@ -193,6 +195,7 @@ function ApplyJobModal({
       }, 0);
     } else {
       setIsCountryDropdownOpen(false);
+      setCountrySearch("");
       setIsDomicileDropdownOpen(false);
       setIsDobPickerOpen(false);
       setDobPickerMode("day");
@@ -236,6 +239,7 @@ function ApplyJobModal({
         !countryDropdownRef.current.contains(event.target as Node)
       ) {
         setIsCountryDropdownOpen(false);
+        setCountrySearch("");
       }
       if (
         isDomicileDropdownOpen &&
@@ -293,6 +297,18 @@ function ApplyJobModal({
   }, [dobViewDate]);
 
   const visibleYear = dobViewDate.getFullYear();
+
+  const filteredCountryOptions = useMemo(() => {
+    const term = countrySearch.trim().toLowerCase();
+    if (!term) return COUNTRY_OPTIONS;
+    return COUNTRY_OPTIONS.filter((country) => {
+      return (
+        country.label.toLowerCase().includes(term) ||
+        country.id.toLowerCase().includes(term) ||
+        country.dialCode.toLowerCase().includes(term)
+      );
+    });
+  }, [countrySearch]);
 
   const calendarDays = useMemo(() => {
     const startOfMonth = new Date(
@@ -884,7 +900,13 @@ function ApplyJobModal({
                       <button
                         type="button"
                         onClick={() =>
-                          setIsCountryDropdownOpen((previous) => !previous)
+                          setIsCountryDropdownOpen((previous) => {
+                            const next = !previous;
+                            if (!previous) {
+                              setCountrySearch("");
+                            }
+                            return next;
+                          })
                         }
                         className="inline-flex items-center gap-2 text-sm text-slate-600 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200 focus-visible:rounded-md pr-3 border-r border-slate-200 cursor-pointer"
                         aria-haspopup="listbox"
@@ -903,43 +925,64 @@ function ApplyJobModal({
                         />
                       </button>
                       {isCountryDropdownOpen && (
-                        <ul
-                          className="absolute left-0 top-full z-10 mt-2 max-h-60 w-52 overflow-y-auto rounded-2xl border border-slate-100 bg-white py-2 shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)] custom-scrollbar"
-                          role="listbox"
-                        >
-                          {COUNTRY_OPTIONS.map((country) => (
-                            <li key={country.id}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCountry(country);
-                                  setIsCountryDropdownOpen(false);
-                                }}
-                                className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition ${
-                                  selectedCountry.id === country.id
-                                    ? "bg-sky-50 text-slate-900"
-                                    : "text-slate-600 hover:bg-slate-50"
-                                }`}
-                                role="option"
-                                aria-selected={
-                                  selectedCountry.id === country.id
-                                }
-                              >
-                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold uppercase text-slate-700">
-                                  {country.id}
-                                </span>
-                                <div className="flex flex-col">
-                                  <span className="text-sm font-semibold">
-                                    {country.label}
-                                  </span>
-                                  <span className="text-xs text-slate-400">
-                                    {country.dialCode}
-                                  </span>
-                                </div>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="absolute left-0 top-full z-10 mt-2 w-52 rounded-2xl border border-slate-100 bg-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)]">
+                          <div className="px-3 pt-3">
+                            <label className="relative block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                              <span className="sr-only">Search country</span>
+                              <input
+                                type="text"
+                                value={countrySearch}
+                                onChange={(event) => setCountrySearch(event.target.value)}
+                                placeholder="Search country"
+                                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                              />
+                            </label>
+                          </div>
+                          <ul
+                            className="custom-scrollbar max-h-60 overflow-y-auto py-2"
+                            role="listbox"
+                          >
+                            {filteredCountryOptions.length ? (
+                              filteredCountryOptions.map((country) => (
+                                <li key={country.id}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCountry(country);
+                                      setIsCountryDropdownOpen(false);
+                                      setCountrySearch("");
+                                    }}
+                                    className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition ${
+                                      selectedCountry.id === country.id
+                                        ? "bg-sky-50 text-slate-900"
+                                        : "text-slate-600 hover:bg-slate-50"
+                                    }`}
+                                    role="option"
+                                    aria-selected={
+                                      selectedCountry.id === country.id
+                                    }
+                                  >
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold uppercase text-slate-700">
+                                      {country.id}
+                                    </span>
+                                    <div className="flex flex-col">
+                                      <span className="text-sm font-semibold">
+                                        {country.label}
+                                      </span>
+                                      <span className="text-xs text-slate-400">
+                                        {country.dialCode}
+                                      </span>
+                                    </div>
+                                  </button>
+                                </li>
+                              ))
+                            ) : (
+                              <li className="px-4 py-3 text-sm text-slate-400">
+                                No matches
+                              </li>
+                            )}
+                          </ul>
+                        </div>
                       )}
                     </div>
                     <input
