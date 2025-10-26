@@ -365,15 +365,14 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
           {isMenuOpen && (
             <div
               ref={menuRef}
-              className="absolute right-0 top-full mt-3 w-48 overflow-hidden rounded-2xl border border-slate-100 bg-white py-2 shadow-[0_26px_60px_-35px_rgba(15,23,42,0.55)] z-50"
+              className="absolute right-0 top-full mt-3 w-48 overflow-hidden rounded-2xl border border-slate-100 bg-white transition hover:bg-slate-50 py-2 shadow-[0_26px_60px_-35px_rgba(15,23,42,0.55)] z-50"
             >
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex w-full items-center justify-between px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                className="flex w-full items-center justify-between px-4 py-2 text-sm font-medium text-red-600"
               >
                 Logout
-                <span className="text-xs text-slate-400">Ctrl+L</span>
               </button>
             </div>
           )}
