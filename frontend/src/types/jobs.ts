@@ -54,8 +54,7 @@ const parseJobs = (value: string | null): StoredJob[] => {
         );
       })
       .sort(
-        (a, b) =>
-          new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()
+        (a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()
       );
   } catch (error) {
     console.error("Failed to parse draft jobs", error);
@@ -73,4 +72,10 @@ export const parseActiveJobs = (value: string | null): StoredJob[] => {
 
 export const parseAllJobs = (value: string | null): StoredJob[] => {
   return parseJobs(value);
+};
+
+export const getAllJobs = (): StoredJob[] => {
+  if (typeof window === "undefined") return [];
+  const rawValue = window.localStorage.getItem(JOB_DRAFT_STORAGE_KEY);
+  return parseAllJobs(rawValue);
 };

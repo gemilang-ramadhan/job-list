@@ -398,6 +398,7 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
       {selectedJob ? (
         <ApplyJobModal
           isOpen={isApplyModalOpen}
+          jobId={selectedJob.id}
           jobTitle={selectedJob.formValues.jobName?.trim() ?? null}
           companyName="Jobby"
           onClose={() => setIsApplyModalOpen(false)}

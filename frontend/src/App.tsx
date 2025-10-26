@@ -10,8 +10,16 @@ import {
 import { faGoogle } from "@fortawesome/free-brands-svg-icons";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
 import AdminDashboard from "./components/AdminDashboard";
 import UserDashboard from "./components/UserDashboard";
+import CandidatesPage from "./pages/CandidatesPage";
 
 const SESSION_STORAGE_KEY = "jobby-session-role";
 const LEGACY_ADMIN_SESSION_KEY = "jobby-admin-session";
@@ -36,6 +44,15 @@ const CREDENTIALS: Array<{
 ];
 
 function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
+}
+
+function AppContent() {
+  const navigate = useNavigate();
   // isPasswordMode controls whether the password-login fields are visible
   const [isPasswordMode, setIsPasswordMode] = useState(false);
   // isRegisterMode controls the overall Register flow (separate from password-login)
@@ -48,6 +65,7 @@ function App() {
   const [passwordError, setPasswordError] = useState("");
   const [isSent, setIsSent] = useState(false);
   const [sessionRole, setSessionRole] = useState<SessionRole | null>(null);
+  const [isSessionResolved, setIsSessionResolved] = useState(false);
   const resetAuthState = () => {
     setIsPasswordMode(false);
     setIsRegisterMode(false);
@@ -67,6 +85,7 @@ function App() {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
       window.localStorage.removeItem(LEGACY_ADMIN_SESSION_KEY);
     }
+    navigate("/");
   };
 
   const establishSession = (role: SessionRole) => {
@@ -79,82 +98,74 @@ function App() {
   };
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const storedRole = window.localStorage.getItem(SESSION_STORAGE_KEY);
-    if (storedRole === "admin" || storedRole === "user") {
-      setSessionRole(storedRole);
+    if (typeof window === "undefined") {
+      setIsSessionResolved(true);
       return;
     }
 
-    const legacySession = window.localStorage.getItem(
-      LEGACY_ADMIN_SESSION_KEY
-    );
+    const storedRole = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (storedRole === "admin" || storedRole === "user") {
+      setSessionRole(storedRole);
+      setIsSessionResolved(true);
+      return;
+    }
+
+    const legacySession = window.localStorage.getItem(LEGACY_ADMIN_SESSION_KEY);
     if (legacySession === "true") {
       window.localStorage.setItem(SESSION_STORAGE_KEY, "admin");
       window.localStorage.removeItem(LEGACY_ADMIN_SESSION_KEY);
       setSessionRole("admin");
+      setIsSessionResolved(true);
+      return;
     }
+
+    setSessionRole(null);
+    setIsSessionResolved(true);
   }, []);
 
-  if (sessionRole === "admin") {
-    return (
-      <AdminDashboard
-        onLogout={handleLogout}
-      />
-    );
-  }
+  const loginPage = isSent ? (
+    <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-10 text-center shadow-md">
+        <h2 className="text-2xl font-semibold text-slate-900">
+          Periksa Email Anda (MOCKUP ONLY)
+        </h2>
+        <p className="mt-4 text-sm text-slate-500">
+          Kami sudah mengirimkan link login ke
+          <span className="font-medium text-slate-900"> {email} </span>
+          yang berlaku dalam <span className="font-medium">30 menit</span>
+        </p>
 
-  if (sessionRole === "user") {
-    return <UserDashboard onLogout={handleLogout} />;
-  }
-
-  if (isSent) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center">
-        <div className="w-full max-w-2xl rounded-2xl bg-white p-10 text-center shadow-md">
-          <h2 className="text-2xl font-semibold text-slate-900">
-            Periksa Email Anda (MOCKUP ONLY)
-          </h2>
-          <p className="mt-4 text-sm text-slate-500">
-            Kami sudah mengirimkan link login ke
-            <span className="font-medium text-slate-900"> {email} </span>
-            yang berlaku dalam <span className="font-medium">30 menit</span>
-          </p>
-
-          <div className="mt-8 flex items-center justify-center">
-            <div className="flex h-40 w-40 items-center justify-center rounded-xl bg-slate-50">
-              <FontAwesomeIcon
-                icon={faEnvelope}
-                className="h-20 w-20 text-sky-500"
-              />
-            </div>
+        <div className="mt-8 flex items-center justify-center">
+          <div className="flex h-40 w-40 items-center justify-center rounded-xl bg-slate-50">
+            <FontAwesomeIcon
+              icon={faEnvelope}
+              className="h-20 w-20 text-sky-500"
+            />
           </div>
         </div>
-        <div className="mt-6 w-full max-w-2xl">
-          <button
-            type="button"
-            onClick={() => {
-              setIsSent(false);
-              setIsForgotPassword(false);
-              setIsRegisterMode(false);
-              setIsPasswordMode(false);
-              // clear inputs and errors when leaving the sent screen
-              setEmail("");
-              setEmailError("");
-              setPassword("");
-              setPasswordError("");
-              setShowPassword(false);
-            }}
-            className="w-full rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-800 shadow hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
-          >
-            Kembali
-          </button>
-        </div>
       </div>
-    );
-  }
-
-  return (
+      <div className="mt-6 w-full max-w-2xl">
+        <button
+          type="button"
+          onClick={() => {
+            setIsSent(false);
+            setIsForgotPassword(false);
+            setIsRegisterMode(false);
+            setIsPasswordMode(false);
+            // clear inputs and errors when leaving the sent screen
+            setEmail("");
+            setEmailError("");
+            setPassword("");
+            setPasswordError("");
+            setShowPassword(false);
+          }}
+          className="w-full rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-800 shadow hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+        >
+          Kembali
+        </button>
+      </div>
+    </div>
+  ) : (
     <div className="min-h-screen bg-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-6">
         <div className="rounded-3xl bg-white p-8 shadow-[0_40px_80px_-60px_rgba(15,23,42,0.6)] ring-1 ring-slate-100">
@@ -496,6 +507,43 @@ function App() {
         </div>
       </div>
     </div>
+  );
+
+  if (!isSessionResolved) {
+    return null;
+  }
+
+  return (
+    <Routes>
+      {sessionRole === "admin" && (
+        <>
+          <Route
+            path="/admin"
+            element={<AdminDashboard onLogout={handleLogout} />}
+          />
+          <Route
+            path="/admin/candidates/:jobId"
+            element={<CandidatesPage onLogout={handleLogout} />}
+          />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </>
+      )}
+      {sessionRole === "user" && (
+        <>
+          <Route
+            path="/user"
+            element={<UserDashboard onLogout={handleLogout} />}
+          />
+          <Route path="*" element={<Navigate to="/user" replace />} />
+        </>
+      )}
+      {!sessionRole && (
+        <>
+          <Route path="/" element={loginPage} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </>
+      )}
+    </Routes>
   );
 }
 

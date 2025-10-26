@@ -16,9 +16,17 @@ import {
   faChevronLeft,
   faChevronRight,
 } from "@fortawesome/free-solid-svg-icons";
+import {
+  appendCandidateToStorage,
+  createCandidateId,
+  JOB_CANDIDATE_UPDATED_EVENT,
+  type CandidateAttribute,
+  type StoredCandidate,
+} from "../types/candidates";
 
 type ApplyJobModalProps = {
   isOpen: boolean;
+  jobId: string;
   jobTitle?: string | null;
   companyName?: string;
   onClose: () => void;
@@ -119,6 +127,7 @@ type DobPickerMode = "day" | "month" | "year";
 
 function ApplyJobModal({
   isOpen,
+  jobId,
   jobTitle,
   companyName = "Jobby",
   onClose,
@@ -226,7 +235,86 @@ function ApplyJobModal({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isFormComplete) return;
-    // Placeholder: integrate with backend/submission flow later.
+    const normalizedJobId = jobId.trim();
+    if (!normalizedJobId) return;
+
+    const submissionDate = new Date();
+    const dobDate = new Date(`${formState.dateOfBirth}T00:00:00`);
+    const formattedDob = Number.isNaN(dobDate.getTime())
+      ? formState.dateOfBirth
+      : new Intl.DateTimeFormat("en-GB", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        }).format(dobDate);
+    const genderLabel =
+      formState.pronoun === "she-her"
+        ? "Female"
+        : formState.pronoun === "he-him"
+        ? "Male"
+        : "Not specified";
+    const phoneLabel = `${selectedCountry.dialCode} ${
+      formState.phoneNumber.trim() || ""
+    }`.trim();
+
+    const candidateAttributes: CandidateAttribute[] = [
+      {
+        key: "full_name",
+        label: "Full Name",
+        value: formState.fullName.trim(),
+        order: 1,
+      },
+      {
+        key: "email",
+        label: "Email",
+        value: formState.email.trim(),
+        order: 2,
+      },
+      {
+        key: "phone",
+        label: "Phone",
+        value: phoneLabel,
+        order: 3,
+      },
+      {
+        key: "date_of_birth",
+        label: "Date of Birth",
+        value: formattedDob,
+        order: 4,
+      },
+      {
+        key: "domicile",
+        label: "Domicile",
+        value: selectedDomicile.label,
+        order: 5,
+      },
+      {
+        key: "gender",
+        label: "Gender",
+        value: genderLabel,
+        order: 6,
+      },
+      {
+        key: "linkedin_link",
+        label: "LinkedIn",
+        value: formState.linkedin.trim(),
+        order: 7,
+      },
+    ];
+
+    const storedCandidate: StoredCandidate = {
+      id: createCandidateId(submissionDate),
+      jobId: normalizedJobId,
+      submittedAt: submissionDate.toISOString(),
+      attributes: candidateAttributes,
+    };
+
+    appendCandidateToStorage(storedCandidate);
+    window.dispatchEvent(
+      new CustomEvent(JOB_CANDIDATE_UPDATED_EVENT, {
+        detail: { jobId: normalizedJobId },
+      })
+    );
     onClose();
   };
 
