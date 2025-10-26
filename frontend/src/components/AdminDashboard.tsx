@@ -310,16 +310,29 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                   {salaryLabel}
                                 </p>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedJob(job);
-                                  setIsJobModalOpen(true);
-                                }}
-                                className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
-                              >
-                                Manage Job
-                              </button>
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    console.log(
+                                      `Manage candidates for job ${job.id}`
+                                    )
+                                  }
+                                  className="inline-flex w-full items-center justify-center rounded-xl bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 sm:w-auto sm:min-w-[160px]"
+                                >
+                                  Manage Candidates
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedJob(job);
+                                    setIsJobModalOpen(true);
+                                  }}
+                                  className="inline-flex w-full items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500 sm:w-auto sm:min-w-[160px]"
+                                >
+                                  Manage Job
+                                </button>
+                              </div>
                             </div>
                           </article>
                         );

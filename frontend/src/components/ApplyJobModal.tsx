@@ -26,7 +26,6 @@ type ApplyFormState = {
   fullName: string;
   dateOfBirth: string;
   pronoun: "she-her" | "he-him" | "";
-  domicile: string;
   phoneNumber: string;
   email: string;
   linkedin: string;
@@ -36,7 +35,6 @@ const initialFormState: ApplyFormState = {
   fullName: "",
   dateOfBirth: "",
   pronoun: "",
-  domicile: "",
   phoneNumber: "",
   email: "",
   linkedin: "",
@@ -52,6 +50,48 @@ const COUNTRY_OPTIONS = [
   { id: "IN", label: "India", dialCode: "+91" },
 ];
 
+const DOMICILE_OPTIONS = [
+  { id: "", label: "Select your domicile" },
+  { id: "aceh", label: "Aceh" },
+  { id: "north-sumatra", label: "North Sumatra" },
+  { id: "west-sumatra", label: "West Sumatra" },
+  { id: "riau", label: "Riau" },
+  { id: "jambi", label: "Jambi" },
+  { id: "south-sumatra", label: "South Sumatra" },
+  { id: "bengkulu", label: "Bengkulu" },
+  { id: "lampung", label: "Lampung" },
+  { id: "bangka-belitung", label: "Bangka Belitung Islands" },
+  { id: "riau-islands", label: "Riau Islands" },
+  { id: "jakarta", label: "Special Capital Region of Jakarta" },
+  { id: "west-java", label: "West Java" },
+  { id: "central-java", label: "Central Java" },
+  { id: "yogyakarta", label: "Special Region of Yogyakarta" },
+  { id: "east-java", label: "East Java" },
+  { id: "banten", label: "Banten" },
+  { id: "bali", label: "Bali" },
+  { id: "west-nusa-tenggara", label: "West Nusa Tenggara" },
+  { id: "east-nusa-tenggara", label: "East Nusa Tenggara" },
+  { id: "west-kalimantan", label: "West Kalimantan" },
+  { id: "central-kalimantan", label: "Central Kalimantan" },
+  { id: "south-kalimantan", label: "South Kalimantan" },
+  { id: "east-kalimantan", label: "East Kalimantan" },
+  { id: "north-kalimantan", label: "North Kalimantan" },
+  { id: "north-sulawesi", label: "North Sulawesi" },
+  { id: "central-sulawesi", label: "Central Sulawesi" },
+  { id: "south-sulawesi", label: "South Sulawesi" },
+  { id: "southeast-sulawesi", label: "Southeast Sulawesi" },
+  { id: "gorontalo", label: "Gorontalo" },
+  { id: "west-sulawesi", label: "West Sulawesi" },
+  { id: "maluku", label: "Maluku" },
+  { id: "north-maluku", label: "North Maluku" },
+  { id: "papua", label: "Papua" },
+  { id: "west-papua", label: "West Papua" },
+  { id: "south-papua", label: "South Papua" },
+  { id: "central-papua", label: "Central Papua" },
+  { id: "highland-papua", label: "Highland Papua" },
+  { id: "southwest-papua", label: "Southwest Papua" },
+];
+
 function ApplyJobModal({
   isOpen,
   jobTitle,
@@ -61,8 +101,11 @@ function ApplyJobModal({
   const [formState, setFormState] = useState<ApplyFormState>(initialFormState);
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_OPTIONS[0]);
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
+  const [selectedDomicile, setSelectedDomicile] = useState(DOMICILE_OPTIONS[0]);
+  const [isDomicileDropdownOpen, setIsDomicileDropdownOpen] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const countryDropdownRef = useRef<HTMLDivElement | null>(null);
+  const domicileDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -100,12 +143,15 @@ function ApplyJobModal({
     if (isOpen) {
       setFormState(initialFormState);
       setSelectedCountry(COUNTRY_OPTIONS[0]);
+      setSelectedDomicile(DOMICILE_OPTIONS[0]);
       setIsCountryDropdownOpen(false);
+      setIsDomicileDropdownOpen(false);
       setTimeout(() => {
         dialogRef.current?.querySelector<HTMLElement>("input, button")?.focus();
       }, 0);
     } else {
       setIsCountryDropdownOpen(false);
+      setIsDomicileDropdownOpen(false);
     }
   }, [isOpen]);
 
@@ -123,12 +169,12 @@ function ApplyJobModal({
       formState.fullName.trim() !== "" &&
       formState.dateOfBirth.trim() !== "" &&
       formState.pronoun.trim() !== "" &&
-      formState.domicile.trim() !== "" &&
+      selectedDomicile.id !== "" &&
       formState.phoneNumber.trim() !== "" &&
       formState.email.trim() !== "" &&
       formState.linkedin.trim() !== ""
     );
-  }, [formState]);
+  }, [formState, selectedDomicile]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -147,12 +193,19 @@ function ApplyJobModal({
       ) {
         setIsCountryDropdownOpen(false);
       }
+      if (
+        isDomicileDropdownOpen &&
+        domicileDropdownRef.current &&
+        !domicileDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsDomicileDropdownOpen(false);
+      }
     };
     window.addEventListener("mousedown", handleClickOutside);
     return () => {
       window.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isOpen, isCountryDropdownOpen]);
+  }, [isOpen, isCountryDropdownOpen, isDomicileDropdownOpen]);
 
   if (!isOpen) {
     return null;
@@ -234,76 +287,137 @@ function ApplyJobModal({
               </div>
 
               <div className="grid gap-5">
-                <label className="block text-sm font-medium text-slate-700">
-                  Full name<span className="text-rose-500">*</span>
+                <div>
+                  <div className="text-sm font-medium text-slate-700 mb-1">
+                    Full name<span className="text-rose-500">*</span>
+                  </div>
                   <input
                     type="text"
                     name="fullName"
                     value={formState.fullName}
                     onChange={handleInputChange}
                     placeholder="Enter your full name"
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
                   />
-                </label>
+                </div>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Date of birth<span className="text-rose-500">*</span>
+                <div>
+                  <div className="text-sm font-medium text-slate-700 mb-1">
+                    Date of birth<span className="text-rose-500">*</span>
+                  </div>
                   <input
                     type="date"
                     name="dateOfBirth"
                     value={formState.dateOfBirth}
                     onChange={handleInputChange}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
                   />
-                </label>
+                </div>
 
-                <fieldset className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
-                  <legend className="px-1 text-sm font-medium text-slate-700">
+                <div>
+                  <div className="text-sm font-medium text-slate-700 mb-1">
                     Pronoun (gender)<span className="text-rose-500">*</span>
-                  </legend>
-                  <div className="mt-3 flex flex-wrap items-center gap-4">
-                    <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
-                      <input
-                        type="radio"
-                        name="pronoun"
-                        value="she-her"
-                        checked={formState.pronoun === "she-her"}
-                        onChange={handleInputChange}
-                        className="h-4 w-4 border-slate-300 text-sky-500 focus:ring-sky-200"
-                      />
-                      She/her (Female)
-                    </label>
-                    <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
-                      <input
-                        type="radio"
-                        name="pronoun"
-                        value="he-him"
-                        checked={formState.pronoun === "he-him"}
-                        onChange={handleInputChange}
-                        className="h-4 w-4 border-slate-300 text-sky-500 focus:ring-sky-200"
-                      />
-                      He/him (Male)
-                    </label>
                   </div>
-                </fieldset>
+                  <fieldset className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+                    <legend className="sr-only">Pronoun (gender)</legend>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
+                        <input
+                          type="radio"
+                          name="pronoun"
+                          value="she-her"
+                          checked={formState.pronoun === "she-her"}
+                          onChange={handleInputChange}
+                          className="h-4 w-4 border-slate-300 text-sky-500 focus:ring-sky-200"
+                        />
+                        She/her (Female)
+                      </label>
+                      <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
+                        <input
+                          type="radio"
+                          name="pronoun"
+                          value="he-him"
+                          checked={formState.pronoun === "he-him"}
+                          onChange={handleInputChange}
+                          className="h-4 w-4 border-slate-300 text-sky-500 focus:ring-sky-200"
+                        />
+                        He/him (Male)
+                      </label>
+                    </div>
+                  </fieldset>
+                </div>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Domicile<span className="text-rose-500">*</span>
-                  <input
-                    type="text"
-                    name="domicile"
-                    value={formState.domicile}
-                    onChange={handleInputChange}
-                    placeholder="Enter your domicile"
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                  />
-                </label>
+                <div>
+                  <div className="text-sm font-medium text-slate-700 mb-1">
+                    Domicile<span className="text-rose-500">*</span>
+                  </div>
+                  <div
+                    ref={domicileDropdownRef}
+                    className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+                  >
+                    <div className="relative flex-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setIsDomicileDropdownOpen((previous) => !previous)
+                        }
+                        className="flex w-full items-center justify-between text-left text-sm text-slate-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200 focus-visible:rounded-md"
+                        aria-haspopup="listbox"
+                        aria-expanded={isDomicileDropdownOpen}
+                        aria-label="Select domicile"
+                      >
+                        <span
+                          className={
+                            selectedDomicile.id === "" ? "text-slate-400" : ""
+                          }
+                        >
+                          {selectedDomicile.label}
+                        </span>
+                        <FontAwesomeIcon
+                          icon={faChevronDown}
+                          className="ml-2 h-4 w-4 text-slate-400"
+                        />
+                      </button>
+                      {isDomicileDropdownOpen && (
+                        <ul
+                          className="absolute left-0 top-full z-10 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl border border-slate-100 bg-white py-2 shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)] custom-scrollbar"
+                          role="listbox"
+                        >
+                          {DOMICILE_OPTIONS.slice(1).map((domicile) => (
+                            <li key={domicile.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedDomicile(domicile);
+                                  setIsDomicileDropdownOpen(false);
+                                }}
+                                className={`flex w-full items-center px-4 py-3 text-left text-sm transition ${
+                                  selectedDomicile.id === domicile.id
+                                    ? "bg-sky-50 text-slate-900"
+                                    : "text-slate-600 hover:bg-slate-50"
+                                }`}
+                                role="option"
+                                aria-selected={
+                                  selectedDomicile.id === domicile.id
+                                }
+                              >
+                                {domicile.label}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Phone number<span className="text-rose-500">*</span>
+                <div>
+                  <div className="text-sm font-medium text-slate-700 mb-1">
+                    Phone number<span className="text-rose-500">*</span>
+                  </div>
                   <div
                     ref={countryDropdownRef}
-                    className="mt-2 flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+                    className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
                   >
                     <div className="relative">
                       <button
@@ -376,31 +490,35 @@ function ApplyJobModal({
                       className="h-10 flex-1 border-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
                     />
                   </div>
-                </label>
+                </div>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Email<span className="text-rose-500">*</span>
+                <div>
+                  <div className="text-sm font-medium text-slate-700 mb-1">
+                    Email<span className="text-rose-500">*</span>
+                  </div>
                   <input
                     type="email"
                     name="email"
                     value={formState.email}
                     onChange={handleInputChange}
                     placeholder="Enter your email address"
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
                   />
-                </label>
+                </div>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Link LinkedIn<span className="text-rose-500">*</span>
+                <div>
+                  <div className="text-sm font-medium text-slate-700 mb-1">
+                    Link LinkedIn<span className="text-rose-500">*</span>
+                  </div>
                   <input
                     type="url"
                     name="linkedin"
                     value={formState.linkedin}
                     onChange={handleInputChange}
                     placeholder="https://linkedin.com/in/username"
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
                   />
-                </label>
+                </div>
               </div>
             </section>
           </div>
