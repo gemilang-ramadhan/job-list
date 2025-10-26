@@ -218,9 +218,9 @@ function ApplyJobModal({
                       className="h-12 w-12"
                     />
                   </div>
-                  <div className="flex flex-1 flex-col gap-3">
+                  <div className="flex flex-1 flex-col gap-3 items-center md:items-start">
                     <p className="text-sm text-slate-500">
-                      Upload a recent photo that clearly shows your face.
+                      Take a photo that clearly shows your face.
                     </p>
                     <button
                       type="button"

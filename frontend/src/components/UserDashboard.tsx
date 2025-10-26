@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { StoredJob } from "../types/jobs";
 import { JOB_DRAFT_STORAGE_KEY, parseActiveJobs } from "../types/jobs";
 import ApplyJobModal from "./ApplyJobModal";
+import JobDetailsModal from "./JobDetailsModal";
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   "full-time": "Full Time",
@@ -35,7 +36,12 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
   });
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 767px)").matches;
+  });
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const selectedJob = useMemo(
@@ -91,6 +97,31 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      const nextMatches = event.matches;
+      setIsMobile(nextMatches);
+      if (!nextMatches) {
+        setIsDetailsModalOpen(false);
+      }
+    };
+    setIsMobile(mediaQuery.matches);
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+    } else {
+      mediaQuery.addListener(handleChange);
+    }
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange);
+      } else {
+        mediaQuery.removeListener(handleChange);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (selectedJobId && !jobs.some((job) => job.id === selectedJobId)) {
       setSelectedJobId(null);
     }
@@ -99,6 +130,7 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
   useEffect(() => {
     if (!selectedJob) {
       setIsApplyModalOpen(false);
+      setIsDetailsModalOpen(false);
     }
   }, [selectedJob]);
 
@@ -207,7 +239,7 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
                       {jobs.length} active{" "}
                       {jobs.length === 1 ? "role" : "roles"}.
                     </p>
-                    <p className="mt-3 text-sm font-medium tracking-wide">
+                    <p className="mt-3 hidden text-sm font-medium tracking-wide md:block">
                       Select a job to preview the full description.
                     </p>
                   </div>
@@ -225,11 +257,16 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
                       <button
                         key={job.id}
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          if (isMobile) {
+                            setSelectedJobId(job.id);
+                            setIsDetailsModalOpen(true);
+                            return;
+                          }
                           setSelectedJobId((prev) =>
                             prev === job.id ? null : job.id
-                          )
-                        }
+                          );
+                        }}
                         className={`group relative flex w-full flex-col gap-4 rounded-2xl border px-6 py-5 text-left shadow-sm transition-all duration-500 ease-in-out ${
                           selected
                             ? "border-sky-400 bg-white shadow-[0_25px_60px_-40px_rgba(14,165,233,0.8)]"
@@ -281,7 +318,7 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
             </section>
 
             {selectedJob ? (
-              <section className="mt-6 flex-1 rounded-3xl border border-slate-200 bg-white shadow-sm transition-all duration-500 ease-in-out md:mt-0 md:translate-x-0 md:opacity-100">
+              <section className="mt-6 hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all duration-500 ease-in-out md:block md:flex-1 md:mt-0 md:translate-x-0 md:opacity-100">
                 <div className="flex items-start justify-between border-b border-slate-300 px-8 py-6">
                   <div className="flex items-start gap-4">
                     <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-500">
@@ -366,6 +403,20 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
           onClose={() => setIsApplyModalOpen(false)}
         />
       ) : null}
+      <JobDetailsModal
+        isOpen={isDetailsModalOpen && Boolean(selectedJob) && isMobile}
+        job={selectedJob}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          if (isMobile) {
+            setSelectedJobId(null);
+          }
+        }}
+        onApply={() => {
+          setIsDetailsModalOpen(false);
+          setIsApplyModalOpen(true);
+        }}
+      />
     </div>
   );
 }
