@@ -7,6 +7,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { StoredJob } from "../types/jobs";
 import { JOB_DRAFT_STORAGE_KEY, parseActiveJobs } from "../types/jobs";
+import ApplyJobModal from "./ApplyJobModal";
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   "full-time": "Full Time",
@@ -33,9 +34,14 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
     return parseActiveJobs(raw);
   });
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const selectedJob = useMemo(
+    () => jobs.find((job) => job.id === selectedJobId) ?? null,
+    [jobs, selectedJobId]
+  );
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -90,10 +96,11 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
     }
   }, [jobs, selectedJobId]);
 
-  const selectedJob = useMemo(
-    () => jobs.find((job) => job.id === selectedJobId) ?? null,
-    [jobs, selectedJobId]
-  );
+  useEffect(() => {
+    if (!selectedJob) {
+      setIsApplyModalOpen(false);
+    }
+  }, [selectedJob]);
 
   const hasJobs = jobs.length > 0;
   const isExpanded = Boolean(selectedJob);
@@ -304,6 +311,7 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
                   </div>
                   <button
                     type="button"
+                    onClick={() => setIsApplyModalOpen(true)}
                     className="inline-flex items-center rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 shadow transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
                   >
                     Apply
@@ -350,6 +358,14 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
           </div>
         )}
       </main>
+      {selectedJob ? (
+        <ApplyJobModal
+          isOpen={isApplyModalOpen}
+          jobTitle={selectedJob.formValues.jobName?.trim() ?? null}
+          companyName="Jobby"
+          onClose={() => setIsApplyModalOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
