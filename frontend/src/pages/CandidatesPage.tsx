@@ -3,8 +3,11 @@ import {
   faCircleUser,
   faChevronLeft,
   faChevronRight,
+  faChevronDown,
   faGripVertical,
 } from "@fortawesome/free-solid-svg-icons";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   useEffect,
   useMemo,
@@ -14,6 +17,7 @@ import {
   type DragEvent as ReactDragEvent,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { utils, writeFileXLSX } from "xlsx";
 import { getAllJobs, type StoredJob } from "../types/jobs";
 import {
   getCandidatesForJob,
@@ -96,8 +100,11 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   const { jobId } = useParams<{ jobId: string }>();
   const [job, setJob] = useState<StoredJob | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const exportButtonRef = useRef<HTMLButtonElement | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Candidates table state
   const [candidates, setCandidates] = useState<StoredCandidate[]>([]);
@@ -171,10 +178,37 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   }, [isMenuOpen]);
 
   useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isExportMenuOpen &&
+        exportMenuRef.current &&
+        !exportMenuRef.current.contains(event.target as Node) &&
+        exportButtonRef.current &&
+        !exportButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsExportMenuOpen(false);
+      }
+    };
+
+    if (isExportMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isExportMenuOpen]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "l") {
         event.preventDefault();
         onLogout();
+      }
+
+      if (event.key === "Escape") {
+        setIsMenuOpen(false);
+        setIsExportMenuOpen(false);
       }
     };
 
@@ -412,12 +446,81 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
       : `${candidates.length} candidates`;
   }, [candidates.length]);
 
+  const exportCandidates = useMemo(() => {
+    if (selectedIds.length === 0) {
+      return candidates;
+    }
+    const selectedSet = new Set(selectedIds);
+    return candidates.filter((candidate) => selectedSet.has(candidate.id));
+  }, [candidates, selectedIds]);
+
+  const exportStructure = useMemo(() => {
+    const headers = orderedColumns.map((column) => column.label);
+    const rows = exportCandidates.map((candidate) =>
+      orderedColumns.map((column) =>
+        resolveAttributeValue(candidate, column.key)
+      )
+    );
+    return { headers, rows };
+  }, [exportCandidates, orderedColumns]);
+
+  const canExport = exportCandidates.length > 0;
+  const exportButtonText =
+    selectedIds.length > 0 ? "Export selection" : "Export";
+
+  const buildFileName = (extension: "pdf" | "xlsx") => {
+    const baseTitle =
+      jobTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60) || "candidates";
+    const scope = selectedIds.length > 0 ? "selection" : "all";
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    return `${baseTitle}-${scope}-${dateStamp}.${extension}`;
+  };
+
+  const handleExportPdf = () => {
+    if (!canExport) return;
+    const { headers, rows } = exportStructure;
+    const pdfDoc = new jsPDF({ orientation: "landscape", unit: "pt" });
+    autoTable(pdfDoc, {
+      head: [headers],
+      body: rows,
+      styles: { fontSize: 10, cellPadding: 6 },
+      headStyles: { fillColor: [14, 165, 233], textColor: 255 },
+      alternateRowStyles: { fillColor: [241, 245, 249] },
+      margin: { top: 36, left: 36, right: 36, bottom: 36 },
+    });
+    pdfDoc.save(buildFileName("pdf"));
+    setIsExportMenuOpen(false);
+  };
+
+  const handleExportExcel = () => {
+    if (!canExport) return;
+    const { headers, rows } = exportStructure;
+    const worksheetData = [headers, ...rows];
+    const worksheet = utils.aoa_to_sheet(worksheetData);
+    const workbook = utils.book_new();
+    utils.book_append_sheet(workbook, worksheet, "Candidates");
+    writeFileXLSX(workbook, buildFileName("xlsx"));
+    setIsExportMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (!canExport) {
+      setIsExportMenuOpen(false);
+    }
+  }, [canExport]);
+
   const handleLogout = () => {
     setIsMenuOpen(false);
+    setIsExportMenuOpen(false);
     onLogout();
   };
 
   const handleBackToJobs = () => {
+    setIsExportMenuOpen(false);
     navigate("/admin");
   };
 
@@ -487,6 +590,51 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
               <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
                 <span>{candidateCountLabel}</span>
                 <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-flex" />
+                <div className="relative mt-2 w-full sm:ml-auto sm:mt-0 sm:w-auto">
+                  <button
+                    ref={exportButtonRef}
+                    type="button"
+                    onClick={() => {
+                      if (!canExport) return;
+                      setIsExportMenuOpen((prev) => !prev);
+                    }}
+                    disabled={!canExport}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    aria-haspopup="menu"
+                    aria-expanded={isExportMenuOpen}
+                  >
+                    {exportButtonText}
+                    <FontAwesomeIcon
+                      icon={faChevronDown}
+                      className="h-4 w-4 text-slate-400"
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {isExportMenuOpen && (
+                    <div
+                      ref={exportMenuRef}
+                      className="absolute left-0 right-auto top-full z-40 mt-2 w-full min-w-[180px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_22px_45px_-25px_rgba(15,23,42,0.45)] sm:left-auto sm:right-0"
+                      role="menu"
+                    >
+                      <button
+                        type="button"
+                        onClick={handleExportPdf}
+                        className="flex w-full items-center justify-between px-4 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                        role="menuitem"
+                      >
+                        Export as PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportExcel}
+                        className="flex w-full items-center justify-between px-4 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                        role="menuitem"
+                      >
+                        Export as Excel
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
