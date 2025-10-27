@@ -17,6 +17,7 @@ import {
   faChevronRight,
   faTimes,
 } from "@fortawesome/free-solid-svg-icons";
+import { Hands } from "@mediapipe/hands";
 import {
   appendCandidateToStorage,
   createCandidateId,
@@ -131,6 +132,42 @@ const YEAR_RANGE = Array.from(
 
 type DobPickerMode = "day" | "month" | "year";
 
+type NormalizedLandmark = {
+  x: number;
+  y: number;
+  z: number;
+  visibility?: number;
+};
+
+type HandDetectionResult = {
+  multiHandLandmarks?: NormalizedLandmark[][];
+  multiHandedness?: Array<{ label?: string; score?: number }>;
+};
+
+const HOLD_FRAMES_REQUIRED = 12;
+const COUNTDOWN_START_VALUE = 3;
+
+const POSE_SEQUENCE = [
+  {
+    id: "pose-1" as const,
+    title: "Pose 1",
+    fingerCount: 1,
+    prompt: "Raise one finger and keep your hand inside the frame.",
+  },
+  {
+    id: "pose-2" as const,
+    title: "Pose 2",
+    fingerCount: 2,
+    prompt: "Great! Now raise two fingers while keeping your palm visible.",
+  },
+  {
+    id: "pose-3" as const,
+    title: "Pose 3",
+    fingerCount: 3,
+    prompt: "Almost done. Raise three fingers to start the countdown.",
+  },
+] as const;
+
 function ApplyJobModal({
   isOpen,
   jobId,
@@ -158,12 +195,47 @@ function ApplyJobModal({
   const domicileDropdownRef = useRef<HTMLDivElement | null>(null);
   const dobPickerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const handsInstanceRef = useRef<Hands | null>(null);
+  const detectionRafRef = useRef<number | null>(null);
+  const countdownTimeoutRef = useRef<number | null>(null);
+  const isProcessingFrameRef = useRef(false);
+  const poseHoldFrameRef = useRef(0);
+  const detectionActiveRef = useRef(false);
+  const poseIndexRef = useRef(0);
+  const feedbackRef = useRef<string>(POSE_SEQUENCE[0].prompt);
+  const poseProgressRef = useRef(0);
+  const countdownRunningRef = useRef(false);
 
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [poseIndex, setPoseIndex] = useState(0);
+  const [poseFeedback, setPoseFeedback] = useState<string>(
+    POSE_SEQUENCE[0].prompt
+  );
+  const [poseProgress, setPoseProgress] = useState(0);
+  const [countdownValue, setCountdownValue] = useState<number | null>(null);
+  const [isCountdownRunning, setIsCountdownRunning] = useState(false);
+
+  useEffect(() => {
+    poseIndexRef.current = poseIndex;
+  }, [poseIndex]);
+
+  useEffect(() => {
+    feedbackRef.current = poseFeedback;
+  }, [poseFeedback]);
+
+  useEffect(() => {
+    poseProgressRef.current = poseProgress;
+  }, [poseProgress]);
+
+  useEffect(() => {
+    countdownRunningRef.current = isCountdownRunning;
+  }, [isCountdownRunning]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -207,6 +279,12 @@ function ApplyJobModal({
       setIsDomicileDropdownOpen(false);
       setIsDobPickerOpen(false);
       setDobPickerMode("day");
+      setPoseIndex(0);
+      setPoseFeedback(POSE_SEQUENCE[0].prompt);
+      setPoseProgress(0);
+      setCountdownValue(null);
+      setIsCountdownRunning(false);
+      setCameraError(null);
       setDobViewDate(() => {
         const baseline = new Date();
         baseline.setFullYear(baseline.getFullYear() - 21);
@@ -224,6 +302,13 @@ function ApplyJobModal({
       setDobPickerMode("day");
       setCapturedPhoto(null);
       setIsCameraOpen(false);
+      stopCamera();
+      setCameraError(null);
+      setPoseIndex(0);
+      setPoseFeedback(POSE_SEQUENCE[0].prompt);
+      setPoseProgress(0);
+      setCountdownValue(null);
+      setIsCountdownRunning(false);
     }
   }, [isOpen]);
 
@@ -644,26 +729,455 @@ function ApplyJobModal({
     setDobPickerMode("month");
   };
 
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          setIsCameraReady(true);
-        };
+  function updatePoseFeedbackSafe(message: string) {
+    if (feedbackRef.current !== message) {
+      feedbackRef.current = message;
+      setPoseFeedback(message);
+    }
+  }
+
+  function updatePoseProgressSafe(value: number) {
+    const normalized = Math.max(0, Math.min(100, Math.round(value)));
+    if (poseProgressRef.current !== normalized) {
+      poseProgressRef.current = normalized;
+      setPoseProgress(normalized);
+    }
+  }
+
+  function clearOverlay() {
+    const canvas = overlayCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function drawHandOverlay(landmarks: NormalizedLandmark[]) {
+    const canvas = overlayCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (!landmarks.length) return;
+
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    const xs = landmarks.map((point) => point.x);
+    const ys = landmarks.map((point) => point.y);
+    const minX = Math.min(...xs) * canvasWidth;
+    const maxX = Math.max(...xs) * canvasWidth;
+    const minY = Math.min(...ys) * canvasHeight;
+    const maxY = Math.max(...ys) * canvasHeight;
+    const padding = 24;
+
+    context.strokeStyle = "rgba(14,165,233,0.85)";
+    context.lineWidth = 3;
+    if (typeof context.roundRect === "function") {
+      context.beginPath();
+      context.roundRect(
+        minX - padding,
+        minY - padding,
+        maxX - minX + padding * 2,
+        maxY - minY + padding * 2,
+        16
+      );
+      context.stroke();
+    } else {
+      context.strokeRect(
+        minX - padding,
+        minY - padding,
+        maxX - minX + padding * 2,
+        maxY - minY + padding * 2
+      );
+    }
+
+    context.fillStyle = "rgba(14,165,233,0.75)";
+    const tipIndexes = [4, 8, 12, 16, 20];
+    tipIndexes.forEach((index) => {
+      const point = landmarks[index];
+      if (!point) return;
+      const x = point.x * canvasWidth;
+      const y = point.y * canvasHeight;
+      context.beginPath();
+      context.arc(x, y, 6, 0, Math.PI * 2);
+      context.fill();
+    });
+  }
+
+  function clearCountdown() {
+    if (countdownTimeoutRef.current !== null) {
+      window.clearTimeout(countdownTimeoutRef.current);
+      countdownTimeoutRef.current = null;
+    }
+    setCountdownValue(null);
+    setIsCountdownRunning(false);
+    countdownRunningRef.current = false;
+  }
+
+  function resetPoseGuidance() {
+    poseHoldFrameRef.current = 0;
+    poseIndexRef.current = 0;
+    setPoseIndex(0);
+    updatePoseFeedbackSafe(POSE_SEQUENCE[0].prompt);
+    updatePoseProgressSafe(0);
+    clearCountdown();
+  }
+
+  function evaluateHandPose(
+    landmarks: NormalizedLandmark[],
+    handednessLabel?: string
+  ) {
+    const fingerLiftThreshold = 0.02;
+    const indexLandmark = landmarks[8];
+    const indexPip = landmarks[6];
+    const middleLandmark = landmarks[12];
+    const middlePip = landmarks[10];
+    const ringLandmark = landmarks[16];
+    const ringPip = landmarks[14];
+    const pinkyLandmark = landmarks[20];
+    const pinkyPip = landmarks[18];
+
+    const indexExtended = Boolean(
+      indexLandmark &&
+        indexPip &&
+        indexLandmark.y < indexPip.y - fingerLiftThreshold
+    );
+    const middleExtended = Boolean(
+      middleLandmark &&
+        middlePip &&
+        middleLandmark.y < middlePip.y - fingerLiftThreshold
+    );
+    const ringExtended = Boolean(
+      ringLandmark &&
+        ringPip &&
+        ringLandmark.y < ringPip.y - fingerLiftThreshold
+    );
+    const pinkyExtended = Boolean(
+      pinkyLandmark &&
+        pinkyPip &&
+        pinkyLandmark.y < pinkyPip.y - fingerLiftThreshold
+    );
+
+    let thumbExtended = false;
+    const thumbTip = landmarks[4];
+    const thumbJoint = landmarks[3];
+    if (thumbTip && thumbJoint && handednessLabel) {
+      const label = handednessLabel.toLowerCase();
+      if (label === "right") {
+        thumbExtended = thumbTip.x > thumbJoint.x + 0.04;
+      } else if (label === "left") {
+        thumbExtended = thumbTip.x < thumbJoint.x - 0.04;
       }
+    }
+
+    const count = [
+      indexExtended,
+      middleExtended,
+      ringExtended,
+      pinkyExtended,
+    ].filter(Boolean).length;
+
+    return {
+      count,
+      extended: {
+        thumb: thumbExtended,
+        index: indexExtended,
+        middle: middleExtended,
+        ring: ringExtended,
+        pinky: pinkyExtended,
+      },
+    };
+  }
+
+  function capturePhotoFromVideo() {
+    if (!videoRef.current || !captureCanvasRef.current) {
+      return null;
+    }
+    if (
+      !videoRef.current.videoWidth ||
+      !videoRef.current.videoHeight ||
+      videoRef.current.readyState < 2
+    ) {
+      return null;
+    }
+
+    const canvas = captureCanvasRef.current;
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+    context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/png");
+  }
+
+  function stopDetectionLoop(closeInstance = false) {
+    detectionActiveRef.current = false;
+    if (detectionRafRef.current !== null) {
+      cancelAnimationFrame(detectionRafRef.current);
+      detectionRafRef.current = null;
+    }
+    isProcessingFrameRef.current = false;
+    if (closeInstance && handsInstanceRef.current) {
+      void handsInstanceRef.current.close();
+      handsInstanceRef.current = null;
+    }
+  }
+
+  function startDetectionLoop() {
+    if (!handsInstanceRef.current || !videoRef.current) {
+      return;
+    }
+    detectionActiveRef.current = true;
+
+    const detect = async () => {
+      if (
+        !detectionActiveRef.current ||
+        !handsInstanceRef.current ||
+        !videoRef.current
+      ) {
+        return;
+      }
+
+      if (
+        isProcessingFrameRef.current ||
+        !videoRef.current.videoWidth ||
+        !videoRef.current.videoHeight
+      ) {
+        detectionRafRef.current = requestAnimationFrame(detect);
+        return;
+      }
+
+      isProcessingFrameRef.current = true;
+      try {
+        await handsInstanceRef.current.send({ image: videoRef.current });
+      } catch (error) {
+        console.error("Hand detection failed:", error);
+      } finally {
+        isProcessingFrameRef.current = false;
+      }
+      detectionRafRef.current = requestAnimationFrame(detect);
+    };
+
+    detectionRafRef.current = requestAnimationFrame(detect);
+  }
+
+  function handleAutoCapture() {
+    const snapshot = capturePhotoFromVideo();
+    clearOverlay();
+    if (!snapshot) {
+      updatePoseFeedbackSafe(
+        "We couldn't capture that frame. Adjust your pose and try again."
+      );
+      resetPoseGuidance();
+      startDetectionLoop();
+      return;
+    }
+    setCapturedPhoto(snapshot);
+    updatePoseFeedbackSafe("Photo captured! Review before submitting.");
+    updatePoseProgressSafe(0);
+    clearCountdown();
+  }
+
+  function startCountdown() {
+    if (countdownRunningRef.current) {
+      return;
+    }
+    stopDetectionLoop();
+    clearCountdown();
+    setIsCountdownRunning(true);
+    countdownRunningRef.current = true;
+    updatePoseFeedbackSafe("Hold your pose. Capturing in a moment...");
+
+    const tick = (value: number) => {
+      setCountdownValue(value);
+      if (value === 0) {
+        handleAutoCapture();
+        return;
+      }
+      countdownTimeoutRef.current = window.setTimeout(() => {
+        tick(value - 1);
+      }, 1000);
+    };
+
+    tick(COUNTDOWN_START_VALUE);
+  }
+
+  function handleHandResults(results: HandDetectionResult) {
+    if (!detectionActiveRef.current || countdownRunningRef.current) {
+      return;
+    }
+
+    const landmarksList = results.multiHandLandmarks;
+    if (!landmarksList || !landmarksList.length) {
+      clearOverlay();
+      poseHoldFrameRef.current = 0;
+      updatePoseProgressSafe(0);
+      const prompt =
+        POSE_SEQUENCE[poseIndexRef.current]?.prompt ??
+        "Raise your hand inside the frame.";
+      updatePoseFeedbackSafe(prompt);
+      return;
+    }
+
+    const handednessLabel = results.multiHandedness?.[0]?.label;
+    const confidence = results.multiHandedness?.[0]?.score ?? 0;
+
+    drawHandOverlay(landmarksList[0]);
+
+    if (confidence < 0.6) {
+      poseHoldFrameRef.current = 0;
+      updatePoseProgressSafe(0);
+      updatePoseFeedbackSafe("Hold steady so we can detect your hand.");
+      return;
+    }
+
+    const poseMetrics = evaluateHandPose(landmarksList[0], handednessLabel);
+    const currentPose = POSE_SEQUENCE[poseIndexRef.current];
+    if (!currentPose) {
+      return;
+    }
+
+    const matchesTarget =
+      (currentPose.fingerCount === 1 && poseMetrics.count === 1) ||
+      (currentPose.fingerCount === 2 && poseMetrics.count === 2) ||
+      (currentPose.fingerCount === 3 && poseMetrics.count >= 3);
+
+    if (matchesTarget) {
+      poseHoldFrameRef.current += 1;
+      const progressRatio =
+        (poseHoldFrameRef.current / HOLD_FRAMES_REQUIRED) * 100;
+      updatePoseProgressSafe(progressRatio);
+
+      if (poseHoldFrameRef.current >= HOLD_FRAMES_REQUIRED) {
+        poseHoldFrameRef.current = 0;
+        updatePoseProgressSafe(100);
+        if (poseIndexRef.current === POSE_SEQUENCE.length - 1) {
+          startCountdown();
+        } else {
+          const nextIndex = Math.min(
+            poseIndexRef.current + 1,
+            POSE_SEQUENCE.length - 1
+          );
+          poseIndexRef.current = nextIndex;
+          setPoseIndex(nextIndex);
+          updatePoseFeedbackSafe(POSE_SEQUENCE[nextIndex].prompt);
+          window.setTimeout(() => {
+            updatePoseProgressSafe(0);
+          }, 200);
+        }
+      } else {
+        updatePoseFeedbackSafe("Great! Keep holding that pose.");
+      }
+    } else {
+      if (poseHoldFrameRef.current !== 0) {
+        poseHoldFrameRef.current = 0;
+        updatePoseProgressSafe(0);
+      }
+      updatePoseFeedbackSafe(currentPose.prompt);
+    }
+  }
+
+  async function initializeHands() {
+    if (handsInstanceRef.current) {
+      try {
+        await handsInstanceRef.current.close();
+      } catch (error) {
+        console.error("Failed to dispose previous hands instance:", error);
+      }
+      handsInstanceRef.current = null;
+    }
+
+    const hands = new Hands({
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.6,
+    });
+    hands.onResults(handleHandResults);
+    handsInstanceRef.current = hands;
+  }
+
+  function syncOverlayDimensions() {
+    if (!videoRef.current || !overlayCanvasRef.current) {
+      return;
+    }
+    overlayCanvasRef.current.width = videoRef.current.videoWidth || 0;
+    overlayCanvasRef.current.height = videoRef.current.videoHeight || 0;
+  }
+
+  async function startCamera() {
+    try {
+      resetPoseGuidance();
+      clearOverlay();
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      streamRef.current = stream;
+      if (!videoRef.current) {
+        return;
+      }
+
+      videoRef.current.srcObject = stream;
+      videoRef.current.playsInline = true;
+      videoRef.current.muted = true;
+
+      await new Promise<void>((resolve) => {
+        if (!videoRef.current) {
+          resolve();
+          return;
+        }
+        if (videoRef.current.readyState >= 2) {
+          resolve();
+          return;
+        }
+        const handleLoadedMetadata = () => {
+          videoRef.current?.removeEventListener(
+            "loadedmetadata",
+            handleLoadedMetadata
+          );
+          resolve();
+        };
+        videoRef.current.addEventListener(
+          "loadedmetadata",
+          handleLoadedMetadata
+        );
+      });
+
+      await videoRef.current
+        .play()
+        .then(() => undefined)
+        .catch(() => undefined);
+
+      syncOverlayDimensions();
+      setIsCameraReady(true);
+      await initializeHands();
+      startDetectionLoop();
     } catch (error) {
       console.error("Error accessing camera:", error);
-      alert("Could not access camera. Please check your permissions.");
-      setIsCameraOpen(false);
+      setCameraError(
+        "We couldn't access your camera. Please check permissions and try again."
+      );
+      stopCamera();
     }
-  };
+  }
 
-  const stopCamera = () => {
+  function stopCamera(closeInstance = true) {
+    stopDetectionLoop(closeInstance);
+    clearCountdown();
+    clearOverlay();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -672,48 +1186,56 @@ function ApplyJobModal({
       videoRef.current.srcObject = null;
     }
     setIsCameraReady(false);
-  };
+  }
 
   const handleOpenCamera = () => {
-    setIsCameraOpen(true);
+    setCameraError(null);
     setCapturedPhoto(null);
-    setTimeout(() => {
+    resetPoseGuidance();
+    setIsCameraOpen(true);
+    window.setTimeout(() => {
       startCamera();
-    }, 100);
-  };
-
-  const handleTakePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext("2d");
-      if (context) {
-        context.drawImage(video, 0, 0);
-        const photoDataUrl = canvas.toDataURL("image/png");
-        setCapturedPhoto(photoDataUrl);
-      }
-    }
+    }, 80);
   };
 
   const handleRetakePhoto = () => {
     setCapturedPhoto(null);
+    setCameraError(null);
+    resetPoseGuidance();
+    clearOverlay();
+    if (handsInstanceRef.current) {
+      startDetectionLoop();
+    } else {
+      initializeHands()
+        .then(() => {
+          startDetectionLoop();
+        })
+        .catch(() => {
+          setCameraError(
+            "Unable to restart detection. Please close and reopen the camera."
+          );
+        });
+    }
   };
 
   const handleSubmitPhoto = () => {
-    if (capturedPhoto) {
-      setFormState((prev) => ({ ...prev, photoProfile: capturedPhoto }));
-      stopCamera();
-      setIsCameraOpen(false);
-      setCapturedPhoto(null);
+    if (!capturedPhoto) {
+      return;
     }
+    setFormState((prev) => ({ ...prev, photoProfile: capturedPhoto }));
+    stopCamera();
+    setIsCameraOpen(false);
+    setCapturedPhoto(null);
+    setCameraError(null);
+    resetPoseGuidance();
   };
 
   const handleCloseCameraModal = () => {
     stopCamera();
     setIsCameraOpen(false);
     setCapturedPhoto(null);
+    setCameraError(null);
+    resetPoseGuidance();
   };
 
   useEffect(() => {
@@ -1349,19 +1871,24 @@ function ApplyJobModal({
       {/* Camera Modal */}
       {isCameraOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               handleCloseCameraModal();
             }
           }}
         >
-          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="relative flex h-screen w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[95vh] sm:rounded-2xl">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-              <h3 className="text-lg font-semibold text-slate-900">
-                {capturedPhoto ? "Review Your Photo" : "Capture Your Picture"}
-              </h3>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Raise Your Hand to Capture
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Follow the finger sequence to trigger an automatic snapshot.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={handleCloseCameraModal}
@@ -1373,7 +1900,7 @@ function ApplyJobModal({
             </div>
 
             {/* Camera/Preview Area */}
-            <div className="relative aspect-[4/3] w-full bg-slate-900">
+            <div className="relative flex-1 w-full bg-slate-900">
               {!capturedPhoto ? (
                 <>
                   <video
@@ -1383,11 +1910,29 @@ function ApplyJobModal({
                     muted
                     className="h-full w-full object-cover"
                   />
+                  <canvas
+                    ref={overlayCanvasRef}
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                  />
                   {!isCameraReady && (
                     <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
                       <div className="text-center">
                         <div className="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-4 border-sky-500 border-t-transparent"></div>
                         <p className="text-sm text-white">Starting camera...</p>
+                      </div>
+                    </div>
+                  )}
+                  {isCameraReady && !isCountdownRunning && (
+                    <div className="pointer-events-none absolute left-4 top-4">
+                      <span className="inline-flex items-center rounded-full bg-emerald-500/85 px-3 py-1 text-xs font-semibold text-white shadow">
+                        Pose {Math.min(poseIndex + 1, POSE_SEQUENCE.length)}
+                      </span>
+                    </div>
+                  )}
+                  {isCountdownRunning && countdownValue !== null && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50">
+                      <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-white/70 bg-slate-900/80 text-4xl font-bold text-white shadow-lg">
+                        {countdownValue}
                       </div>
                     </div>
                   )}
@@ -1399,27 +1944,77 @@ function ApplyJobModal({
                   className="h-full w-full object-cover"
                 />
               )}
-              <canvas ref={canvasRef} className="hidden" />
+              <canvas ref={captureCanvasRef} className="hidden" />
             </div>
 
             {/* Instructions & Actions */}
-            <div className="border-t border-slate-100 bg-white px-6 py-4">
-              <p className="mb-4 text-center text-sm text-slate-600">
-                {capturedPhoto
-                  ? "Click retake photo to take again"
-                  : "Position your face in the frame and click Take Photo"}
-              </p>
-              <div className="flex gap-3">
-                {!capturedPhoto ? (
-                  <button
-                    type="button"
-                    onClick={handleTakePhoto}
-                    disabled={!isCameraReady}
-                    className="w-full rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
-                  >
-                    Take Photo
-                  </button>
+            <div className="border-t border-slate-100 bg-white px-6 py-5">
+              {cameraError ? (
+                <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+                  {cameraError}
+                </div>
+              ) : null}
+              <div className="space-y-5">
+                {cameraError ? null : !capturedPhoto ? (
+                  <>
+                    <p className="text-center text-sm text-slate-600">
+                      {poseFeedback}
+                    </p>
+                    <div className="mx-auto h-2 w-full max-w-md rounded-full bg-slate-200">
+                      <div
+                        className="h-full rounded-full bg-sky-500 transition-all duration-200"
+                        style={{ width: `${poseProgress}%` }}
+                      ></div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      {POSE_SEQUENCE.map((pose, index) => {
+                        const isCompleted = index < poseIndex;
+                        const isActive = index === poseIndex;
+                        return (
+                          <div
+                            key={pose.id}
+                            className="flex flex-1 flex-col items-center gap-2 text-center"
+                          >
+                            <span
+                              className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold transition ${
+                                isCompleted
+                                  ? "border-emerald-500 bg-emerald-50 text-emerald-600"
+                                  : isActive
+                                  ? "border-sky-500 bg-sky-50 text-sky-600"
+                                  : "border-slate-200 text-slate-400"
+                              }`}
+                            >
+                              {index + 1}
+                            </span>
+                            <span
+                              className={`text-xs font-semibold ${
+                                isCompleted
+                                  ? "text-emerald-600"
+                                  : isActive
+                                  ? "text-slate-700"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {pose.title}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-center text-xs text-slate-400">
+                      Sequence: raise 1 finger, then 2 fingers, then 3 fingers.
+                      We&apos;ll start a 3 second countdown once the final pose
+                      is detected.
+                    </p>
+                  </>
                 ) : (
+                  <p className="text-center text-sm text-slate-600">
+                    Happy with this shot? Save it or retake another one.
+                  </p>
+                )}
+              </div>
+              <div className="mt-5 flex gap-3">
+                {capturedPhoto ? (
                   <>
                     <button
                       type="button"
@@ -1433,10 +2028,10 @@ function ApplyJobModal({
                       onClick={handleSubmitPhoto}
                       className="flex-1 rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
                     >
-                      Submit
+                      Use Photo
                     </button>
                   </>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
