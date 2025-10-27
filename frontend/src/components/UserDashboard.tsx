@@ -448,6 +448,7 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
           jobId={selectedJob.id}
           jobTitle={selectedJob.formValues.jobName?.trim() ?? null}
           companyName="Jobby"
+          job={selectedJob}
           onClose={() => setIsApplyModalOpen(false)}
         />
       ) : null}

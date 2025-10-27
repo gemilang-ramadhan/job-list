@@ -2,6 +2,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCircleUser,
   faChevronLeft,
+  faChevronRight,
   faGripVertical,
 } from "@fortawesome/free-solid-svg-icons";
 import {
@@ -126,6 +127,10 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     null
   );
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10; // Number of candidates per page
+
   useEffect(() => {
     if (!jobId) {
       navigate("/admin");
@@ -224,7 +229,24 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   // Reset selection when candidates or job changes
   useEffect(() => {
     setSelectedIds([]);
+    setCurrentPage(1); // Reset to first page when data changes
   }, [job?.id, candidates.length]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(candidates.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedCandidates = candidates.slice(startIndex, endIndex);
+
+  // Handle page changes
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const goToPreviousPage = () => goToPage(currentPage - 1);
+  const goToNextPage = () => goToPage(currentPage + 1);
 
   // Reset column widths when job changes
   useEffect(() => {
@@ -566,7 +588,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {candidates.length === 0 ? (
+                    {paginatedCandidates.length === 0 ? (
                       <tr className="border-t border-slate-200">
                         <td
                           colSpan={orderedColumns.length + 1}
@@ -584,7 +606,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                         </td>
                       </tr>
                     ) : (
-                      candidates.map((candidate) => {
+                      paginatedCandidates.map((candidate) => {
                         const isSelected = selectedIds.includes(candidate.id);
                         return (
                           <tr
@@ -673,6 +695,91 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                 </table>
               </div>
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
+                <div className="flex flex-1 justify-between sm:hidden">
+                  <button
+                    type="button"
+                    onClick={goToPreviousPage}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goToNextPage}
+                    disabled={currentPage === totalPages}
+                    className="relative ml-3 inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm text-slate-700">
+                      Showing{" "}
+                      <span className="font-medium">{startIndex + 1}</span> to{" "}
+                      <span className="font-medium">
+                        {Math.min(endIndex, candidates.length)}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-medium">{candidates.length}</span>{" "}
+                      results
+                    </p>
+                  </div>
+                  <div>
+                    <nav
+                      className="isolate inline-flex -space-x-px rounded-md shadow-sm"
+                      aria-label="Pagination"
+                    >
+                      <button
+                        type="button"
+                        onClick={goToPreviousPage}
+                        disabled={currentPage === 1}
+                        className="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span className="sr-only">Previous</span>
+                        <FontAwesomeIcon
+                          icon={faChevronLeft}
+                          className="h-5 w-5"
+                        />
+                      </button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                        (page) => (
+                          <button
+                            key={page}
+                            type="button"
+                            onClick={() => goToPage(page)}
+                            className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
+                              page === currentPage
+                                ? "z-10 bg-sky-500 text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+                                : "text-slate-900 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0"
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        )
+                      )}
+                      <button
+                        type="button"
+                        onClick={goToNextPage}
+                        disabled={currentPage === totalPages}
+                        className="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span className="sr-only">Next</span>
+                        <FontAwesomeIcon
+                          icon={faChevronRight}
+                          className="h-5 w-5"
+                        />
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </main>

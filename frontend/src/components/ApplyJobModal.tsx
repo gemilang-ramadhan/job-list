@@ -24,12 +24,14 @@ import {
   type CandidateAttribute,
   type StoredCandidate,
 } from "../types/candidates";
+import type { StoredJob } from "../types/jobs";
 
 type ApplyJobModalProps = {
   isOpen: boolean;
   jobId: string;
   jobTitle?: string | null;
   companyName?: string;
+  job?: StoredJob | null;
   onClose: () => void;
 };
 
@@ -134,6 +136,7 @@ function ApplyJobModal({
   jobId,
   jobTitle,
   companyName = "Jobby",
+  job,
   onClose,
 }: ApplyJobModalProps) {
   const [formState, setFormState] = useState<ApplyFormState>(initialFormState);
@@ -259,18 +262,48 @@ function ApplyJobModal({
     }
   };
 
+  const profileFields = job?.profileFields ?? [];
+
+  const isFieldRequired = (fieldKey: string) => {
+    const field = profileFields.find((f) => f.key === fieldKey);
+    return field?.requirement === "Mandatory";
+  };
+
+  const isFieldVisible = (fieldKey: string) => {
+    const field = profileFields.find((f) => f.key === fieldKey);
+    return field?.requirement !== "Off";
+  };
+
   const isFormComplete = useMemo(() => {
-    return (
-      formState.fullName.trim() !== "" &&
-      formState.dateOfBirth.trim() !== "" &&
-      formState.pronoun.trim() !== "" &&
-      selectedDomicile.id !== "" &&
-      formState.phoneNumber.trim() !== "" &&
-      formState.email.trim() !== "" &&
-      formState.linkedin.trim() !== "" &&
-      formState.photoProfile.trim() !== ""
-    );
-  }, [formState, selectedDomicile]);
+    const checks: Record<string, boolean> = {};
+
+    if (isFieldRequired("full_name")) {
+      checks.full_name = formState.fullName.trim() !== "";
+    }
+    if (isFieldRequired("photo_profile")) {
+      checks.photo_profile = formState.photoProfile.trim() !== "";
+    }
+    if (isFieldRequired("date_of_birth")) {
+      checks.date_of_birth = formState.dateOfBirth.trim() !== "";
+    }
+    if (isFieldRequired("gender")) {
+      checks.gender = formState.pronoun.trim() !== "";
+    }
+    if (isFieldRequired("domicile")) {
+      checks.domicile = selectedDomicile.id !== "";
+    }
+    if (isFieldRequired("phone_number")) {
+      checks.phone_number = formState.phoneNumber.trim() !== "";
+    }
+    if (isFieldRequired("email")) {
+      checks.email = formState.email.trim() !== "";
+    }
+    if (isFieldRequired("linkedin_link")) {
+      checks.linkedin_link = formState.linkedin.trim() !== "";
+    }
+
+    return Object.values(checks).every((isValid) => isValid);
+  }, [formState, selectedDomicile, profileFields]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -740,516 +773,559 @@ function ApplyJobModal({
         >
           <div className="custom-scrollbar flex-1 overflow-y-auto px-8 py-6">
             <section className="space-y-6">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  Photo Profile<span className="text-rose-500">*</span>
-                </p>
-                <div className="mt-4 flex flex-col items-center gap-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-6 sm:flex-row sm:items-center sm:gap-6">
-                  <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-500 overflow-hidden">
-                    {formState.photoProfile ? (
-                      <img
-                        src={formState.photoProfile}
-                        alt="Profile"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <FontAwesomeIcon
-                        icon={faCircleUser}
-                        className="h-12 w-12"
-                      />
+              {isFieldVisible("photo_profile") && (
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    Photo Profile
+                    {isFieldRequired("photo_profile") && (
+                      <span className="text-rose-500">*</span>
                     )}
-                  </div>
-                  <div className="flex flex-1 flex-col gap-3 items-center md:items-start">
-                    <p className="text-sm text-slate-500">
-                      Take a photo that clearly shows your face.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleOpenCamera}
-                      className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200"
-                    >
-                      <FontAwesomeIcon icon={faCamera} className="h-4 w-4" />
-                      {formState.photoProfile
-                        ? "Retake Picture"
-                        : "Take a Picture"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-5">
-                <div>
-                  <div className="text-sm font-medium text-slate-700 mb-1">
-                    Full name<span className="text-rose-500">*</span>
-                  </div>
-                  <input
-                    type="text"
-                    name="fullName"
-                    value={formState.fullName}
-                    onChange={handleInputChange}
-                    placeholder="Enter your full name"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                  />
-                </div>
-
-                <div>
-                  <div className="text-sm font-medium text-slate-700 mb-1">
-                    Date of birth<span className="text-rose-500">*</span>
-                  </div>
-                  <div ref={dobPickerRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsDobPickerOpen((previous) => {
-                          const next = !previous;
-                          if (!previous) {
-                            const nextViewDate = selectedDate
-                              ? new Date(selectedDate)
-                              : (() => {
-                                  const fallback = new Date();
-                                  fallback.setFullYear(
-                                    fallback.getFullYear() - 21
-                                  );
-                                  return fallback;
-                                })();
-                            nextViewDate.setHours(0, 0, 0, 0);
-                            if (nextViewDate < minSelectableDate) {
-                              setDobViewDate(new Date(minSelectableDate));
-                            } else {
-                              setDobViewDate(nextViewDate);
-                            }
-                            setDobPickerMode("day");
-                          } else {
-                            setDobPickerMode("day");
-                          }
-                          return next;
-                        });
-                      }}
-                      className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                        isDobPickerOpen
-                          ? "border-sky-400 focus-visible:outline-sky-200"
-                          : "border-slate-200 focus-visible:outline-sky-200"
-                      } ${selectedDate ? "text-slate-900" : "text-slate-400"}`}
-                      aria-haspopup="dialog"
-                      aria-expanded={isDobPickerOpen}
-                    >
-                      <span>{dobDisplayLabel}</span>
-                      <FontAwesomeIcon
-                        icon={faChevronDown}
-                        className="ml-2 h-4 w-4 text-slate-400"
-                      />
-                    </button>
-                    {isDobPickerOpen && (
-                      <div className="absolute left-0 top-full z-20 mt-3 w-full rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)]">
-                        <div className="flex items-center justify-between">
-                          <button
-                            type="button"
-                            onClick={() => shiftDobMonth(-1)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label="Previous"
-                            disabled={disablePrev}
-                          >
-                            <FontAwesomeIcon
-                              icon={faChevronLeft}
-                              className="h-3 w-3"
-                            />
-                          </button>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setDobPickerMode("month")}
-                              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
-                                dobPickerMode === "month"
-                                  ? "bg-sky-100 text-sky-600"
-                                  : "text-slate-700 hover:bg-slate-100"
-                              }`}
-                              aria-pressed={dobPickerMode === "month"}
-                            >
-                              {visibleMonthName}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDobPickerMode("year")}
-                              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
-                                dobPickerMode === "year"
-                                  ? "bg-sky-100 text-sky-600"
-                                  : "text-slate-700 hover:bg-slate-100"
-                              }`}
-                              aria-pressed={dobPickerMode === "year"}
-                            >
-                              {visibleYear}
-                            </button>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => shiftDobMonth(1)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label="Next"
-                            disabled={disableNext}
-                          >
-                            <FontAwesomeIcon
-                              icon={faChevronRight}
-                              className="h-3 w-3"
-                            />
-                          </button>
-                        </div>
-                        {dobPickerMode === "day" && (
-                          <>
-                            <div className="mt-4 grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                              {DAY_LABELS.map((day) => (
-                                <div key={day}>{day}</div>
-                              ))}
-                            </div>
-                            <div className="mt-2 grid grid-cols-7 gap-1 text-sm">
-                              {calendarDays.map((date) => {
-                                const isCurrentMonth =
-                                  date.getMonth() === dobViewDate.getMonth() &&
-                                  date.getFullYear() ===
-                                    dobViewDate.getFullYear();
-                                const isSelected =
-                                  selectedDate &&
-                                  date.getTime() === selectedDate.getTime();
-                                const isToday =
-                                  date.getTime() === now.getTime();
-                                const isDisabled =
-                                  date > now || date < minSelectableDate;
-
-                                return (
-                                  <button
-                                    key={date.toISOString()}
-                                    type="button"
-                                    onClick={() => handleSelectDob(date)}
-                                    disabled={isDisabled}
-                                    className={`inline-flex h-10 w-full items-center justify-center rounded-lg border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
-                                      isSelected
-                                        ? "border-sky-500 bg-sky-500 text-white shadow"
-                                        : isToday
-                                        ? "border-slate-200 bg-slate-100 text-slate-800"
-                                        : "border-transparent"
-                                    } ${
-                                      isCurrentMonth
-                                        ? "text-slate-700"
-                                        : "text-slate-300"
-                                    } ${
-                                      isDisabled
-                                        ? "cursor-not-allowed opacity-50"
-                                        : "hover:border-slate-200 hover:bg-slate-50"
-                                    }`}
-                                    aria-pressed={Boolean(isSelected)}
-                                    aria-label={new Intl.DateTimeFormat(
-                                      "en-US",
-                                      {
-                                        day: "numeric",
-                                        month: "long",
-                                        year: "numeric",
-                                      }
-                                    ).format(date)}
-                                  >
-                                    {date.getDate()}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </>
-                        )}
-                        {dobPickerMode === "month" && (
-                          <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                            {MONTH_LABELS.map((monthName, index) => {
-                              const isSelectedMonth =
-                                dobViewDate.getMonth() === index;
-                              const isDisabled =
-                                visibleYear > currentYear ||
-                                (visibleYear === currentYear &&
-                                  index > currentMonth);
-                              return (
-                                <button
-                                  key={monthName}
-                                  type="button"
-                                  onClick={() => handleMonthClick(index)}
-                                  disabled={isDisabled}
-                                  className={`rounded-xl px-3 py-2 text-center font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
-                                    isSelectedMonth
-                                      ? "bg-sky-500 text-white shadow"
-                                      : "bg-slate-50 text-slate-700 hover:bg-slate-100"
-                                  } ${
-                                    isDisabled
-                                      ? "cursor-not-allowed opacity-40"
-                                      : ""
-                                  }`}
-                                >
-                                  {monthName.slice(0, 3)}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                        {dobPickerMode === "year" && (
-                          <div className="mt-4 grid grid-cols-4 gap-2 text-sm">
-                            {yearGrid.years.map((year) => {
-                              const isSelectedYear =
-                                dobViewDate.getFullYear() === year;
-                              const isDisabled = year > currentYear;
-                              return (
-                                <button
-                                  key={year}
-                                  type="button"
-                                  onClick={() => handleYearClick(year)}
-                                  disabled={isDisabled}
-                                  className={`rounded-xl px-3 py-2 text-center font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
-                                    isSelectedYear
-                                      ? "bg-sky-500 text-white shadow"
-                                      : "bg-slate-50 text-slate-700 hover:bg-slate-100"
-                                  } ${
-                                    isDisabled
-                                      ? "cursor-not-allowed opacity-40"
-                                      : ""
-                                  }`}
-                                >
-                                  {year}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-sm font-medium text-slate-700 mb-1">
-                    Pronoun (gender)<span className="text-rose-500">*</span>
-                  </div>
-                  <fieldset className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
-                    <legend className="sr-only">Pronoun (gender)</legend>
-                    <div className="flex flex-wrap items-center gap-4">
-                      <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
-                        <input
-                          type="radio"
-                          name="pronoun"
-                          value="she-her"
-                          checked={formState.pronoun === "she-her"}
-                          onChange={handleInputChange}
-                          className="h-4 w-4 border-slate-300 text-sky-500 focus:ring-sky-200"
+                  </p>
+                  <div className="mt-4 flex flex-col items-center gap-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-6 sm:flex-row sm:items-center sm:gap-6">
+                    <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-500 overflow-hidden">
+                      {formState.photoProfile ? (
+                        <img
+                          src={formState.photoProfile}
+                          alt="Profile"
+                          className="h-full w-full object-cover"
                         />
-                        She/her (Female)
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
-                        <input
-                          type="radio"
-                          name="pronoun"
-                          value="he-him"
-                          checked={formState.pronoun === "he-him"}
-                          onChange={handleInputChange}
-                          className="h-4 w-4 border-slate-300 text-sky-500 focus:ring-sky-200"
+                      ) : (
+                        <FontAwesomeIcon
+                          icon={faCircleUser}
+                          className="h-12 w-12"
                         />
-                        He/him (Male)
-                      </label>
+                      )}
                     </div>
-                  </fieldset>
-                </div>
-
-                <div>
-                  <div className="text-sm font-medium text-slate-700 mb-1">
-                    Domicile<span className="text-rose-500">*</span>
-                  </div>
-                  <div
-                    ref={domicileDropdownRef}
-                    className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
-                  >
-                    <div className="relative flex-1">
+                    <div className="flex flex-1 flex-col gap-3 items-center md:items-start">
+                      <p className="text-sm text-slate-500">
+                        Take a photo that clearly shows your face.
+                      </p>
                       <button
                         type="button"
-                        onClick={() =>
-                          setIsDomicileDropdownOpen((previous) => !previous)
-                        }
-                        className="flex w-full items-center justify-between text-left text-sm text-slate-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200 focus-visible:rounded-md"
-                        aria-haspopup="listbox"
-                        aria-expanded={isDomicileDropdownOpen}
-                        aria-label="Select domicile"
+                        onClick={handleOpenCamera}
+                        className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200"
                       >
-                        <span
-                          className={
-                            selectedDomicile.id === "" ? "text-slate-400" : ""
-                          }
-                        >
-                          {selectedDomicile.label}
-                        </span>
+                        <FontAwesomeIcon icon={faCamera} className="h-4 w-4" />
+                        {formState.photoProfile
+                          ? "Retake Picture"
+                          : "Take a Picture"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-5">
+                {isFieldVisible("full_name") && (
+                  <div>
+                    <div className="text-sm font-medium text-slate-700 mb-1">
+                      Full name
+                      {isFieldRequired("full_name") && (
+                        <span className="text-rose-500">*</span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      name="fullName"
+                      value={formState.fullName}
+                      onChange={handleInputChange}
+                      placeholder="Enter your full name"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </div>
+                )}
+
+                {isFieldVisible("date_of_birth") && (
+                  <div>
+                    <div className="text-sm font-medium text-slate-700 mb-1">
+                      Date of birth
+                      {isFieldRequired("date_of_birth") && (
+                        <span className="text-rose-500">*</span>
+                      )}
+                    </div>
+                    <div ref={dobPickerRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsDobPickerOpen((previous) => {
+                            const next = !previous;
+                            if (!previous) {
+                              const nextViewDate = selectedDate
+                                ? new Date(selectedDate)
+                                : (() => {
+                                    const fallback = new Date();
+                                    fallback.setFullYear(
+                                      fallback.getFullYear() - 21
+                                    );
+                                    return fallback;
+                                  })();
+                              nextViewDate.setHours(0, 0, 0, 0);
+                              if (nextViewDate < minSelectableDate) {
+                                setDobViewDate(new Date(minSelectableDate));
+                              } else {
+                                setDobViewDate(nextViewDate);
+                              }
+                              setDobPickerMode("day");
+                            } else {
+                              setDobPickerMode("day");
+                            }
+                            return next;
+                          });
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                          isDobPickerOpen
+                            ? "border-sky-400 focus-visible:outline-sky-200"
+                            : "border-slate-200 focus-visible:outline-sky-200"
+                        } ${
+                          selectedDate ? "text-slate-900" : "text-slate-400"
+                        }`}
+                        aria-haspopup="dialog"
+                        aria-expanded={isDobPickerOpen}
+                      >
+                        <span>{dobDisplayLabel}</span>
                         <FontAwesomeIcon
                           icon={faChevronDown}
                           className="ml-2 h-4 w-4 text-slate-400"
                         />
                       </button>
-                      {isDomicileDropdownOpen && (
-                        <ul
-                          className="absolute left-0 top-full z-10 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl border border-slate-100 bg-white py-2 shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)] custom-scrollbar"
-                          role="listbox"
-                        >
-                          {DOMICILE_OPTIONS.slice(1).map((domicile) => (
-                            <li key={domicile.id}>
+                      {isDobPickerOpen && (
+                        <div className="absolute left-0 top-full z-20 mt-3 w-full rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)]">
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={() => shiftDobMonth(-1)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label="Previous"
+                              disabled={disablePrev}
+                            >
+                              <FontAwesomeIcon
+                                icon={faChevronLeft}
+                                className="h-3 w-3"
+                              />
+                            </button>
+                            <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setSelectedDomicile(domicile);
-                                  setIsDomicileDropdownOpen(false);
-                                }}
-                                className={`flex w-full items-center px-4 py-3 text-left text-sm transition ${
-                                  selectedDomicile.id === domicile.id
-                                    ? "bg-sky-50 text-slate-900"
-                                    : "text-slate-600 hover:bg-slate-50"
+                                onClick={() => setDobPickerMode("month")}
+                                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
+                                  dobPickerMode === "month"
+                                    ? "bg-sky-100 text-sky-600"
+                                    : "text-slate-700 hover:bg-slate-100"
                                 }`}
-                                role="option"
-                                aria-selected={
-                                  selectedDomicile.id === domicile.id
-                                }
+                                aria-pressed={dobPickerMode === "month"}
                               >
-                                {domicile.label}
+                                {visibleMonthName}
                               </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-sm font-medium text-slate-700 mb-1">
-                    Phone number<span className="text-rose-500">*</span>
-                  </div>
-                  <div
-                    ref={countryDropdownRef}
-                    className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
-                  >
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setIsCountryDropdownOpen((previous) => {
-                            const next = !previous;
-                            if (!previous) {
-                              setCountrySearch("");
-                            }
-                            return next;
-                          })
-                        }
-                        className="inline-flex items-center gap-2 text-sm text-slate-600 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200 focus-visible:rounded-md pr-3 border-r border-slate-200 cursor-pointer"
-                        aria-haspopup="listbox"
-                        aria-expanded={isCountryDropdownOpen}
-                        aria-label="Select country code"
-                      >
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold uppercase text-slate-700">
-                          {selectedCountry.id}
-                        </span>
-                        <span className="text-sm font-semibold text-slate-600">
-                          {selectedCountry.dialCode}
-                        </span>
-                        <FontAwesomeIcon
-                          icon={faChevronDown}
-                          className="ml-1 h-3 w-3 text-slate-400"
-                        />
-                      </button>
-                      {isCountryDropdownOpen && (
-                        <div className="absolute left-0 top-full z-10 mt-2 w-52 rounded-2xl border border-slate-100 bg-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)]">
-                          <div className="px-3 pt-3">
-                            <label className="relative block text-xs font-semibold uppercase tracking-wide text-slate-400">
-                              <span className="sr-only">Search country</span>
-                              <input
-                                type="text"
-                                value={countrySearch}
-                                onChange={(event) =>
-                                  setCountrySearch(event.target.value)
-                                }
-                                placeholder="Search country"
-                                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                              <button
+                                type="button"
+                                onClick={() => setDobPickerMode("year")}
+                                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
+                                  dobPickerMode === "year"
+                                    ? "bg-sky-100 text-sky-600"
+                                    : "text-slate-700 hover:bg-slate-100"
+                                }`}
+                                aria-pressed={dobPickerMode === "year"}
+                              >
+                                {visibleYear}
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => shiftDobMonth(1)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label="Next"
+                              disabled={disableNext}
+                            >
+                              <FontAwesomeIcon
+                                icon={faChevronRight}
+                                className="h-3 w-3"
                               />
-                            </label>
+                            </button>
                           </div>
-                          <ul
-                            className="custom-scrollbar max-h-60 overflow-y-auto py-2"
-                            role="listbox"
-                          >
-                            {filteredCountryOptions.length ? (
-                              filteredCountryOptions.map((country) => (
-                                <li key={country.id}>
+                          {dobPickerMode === "day" && (
+                            <>
+                              <div className="mt-4 grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                {DAY_LABELS.map((day) => (
+                                  <div key={day}>{day}</div>
+                                ))}
+                              </div>
+                              <div className="mt-2 grid grid-cols-7 gap-1 text-sm">
+                                {calendarDays.map((date) => {
+                                  const isCurrentMonth =
+                                    date.getMonth() ===
+                                      dobViewDate.getMonth() &&
+                                    date.getFullYear() ===
+                                      dobViewDate.getFullYear();
+                                  const isSelected =
+                                    selectedDate &&
+                                    date.getTime() === selectedDate.getTime();
+                                  const isToday =
+                                    date.getTime() === now.getTime();
+                                  const isDisabled =
+                                    date > now || date < minSelectableDate;
+
+                                  return (
+                                    <button
+                                      key={date.toISOString()}
+                                      type="button"
+                                      onClick={() => handleSelectDob(date)}
+                                      disabled={isDisabled}
+                                      className={`inline-flex h-10 w-full items-center justify-center rounded-lg border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
+                                        isSelected
+                                          ? "border-sky-500 bg-sky-500 text-white shadow"
+                                          : isToday
+                                          ? "border-slate-200 bg-slate-100 text-slate-800"
+                                          : "border-transparent"
+                                      } ${
+                                        isCurrentMonth
+                                          ? "text-slate-700"
+                                          : "text-slate-300"
+                                      } ${
+                                        isDisabled
+                                          ? "cursor-not-allowed opacity-50"
+                                          : "hover:border-slate-200 hover:bg-slate-50"
+                                      }`}
+                                      aria-pressed={Boolean(isSelected)}
+                                      aria-label={new Intl.DateTimeFormat(
+                                        "en-US",
+                                        {
+                                          day: "numeric",
+                                          month: "long",
+                                          year: "numeric",
+                                        }
+                                      ).format(date)}
+                                    >
+                                      {date.getDate()}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+                          {dobPickerMode === "month" && (
+                            <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                              {MONTH_LABELS.map((monthName, index) => {
+                                const isSelectedMonth =
+                                  dobViewDate.getMonth() === index;
+                                const isDisabled =
+                                  visibleYear > currentYear ||
+                                  (visibleYear === currentYear &&
+                                    index > currentMonth);
+                                return (
                                   <button
+                                    key={monthName}
                                     type="button"
-                                    onClick={() => {
-                                      setSelectedCountry(country);
-                                      setIsCountryDropdownOpen(false);
-                                      setCountrySearch("");
-                                    }}
-                                    className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition ${
-                                      selectedCountry.id === country.id
-                                        ? "bg-sky-50 text-slate-900"
-                                        : "text-slate-600 hover:bg-slate-50"
+                                    onClick={() => handleMonthClick(index)}
+                                    disabled={isDisabled}
+                                    className={`rounded-xl px-3 py-2 text-center font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
+                                      isSelectedMonth
+                                        ? "bg-sky-500 text-white shadow"
+                                        : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                                    } ${
+                                      isDisabled
+                                        ? "cursor-not-allowed opacity-40"
+                                        : ""
                                     }`}
-                                    role="option"
-                                    aria-selected={
-                                      selectedCountry.id === country.id
-                                    }
                                   >
-                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold uppercase text-slate-700">
-                                      {country.id}
-                                    </span>
-                                    <div className="flex flex-col">
-                                      <span className="text-sm font-semibold">
-                                        {country.label}
-                                      </span>
-                                      <span className="text-xs text-slate-400">
-                                        {country.dialCode}
-                                      </span>
-                                    </div>
+                                    {monthName.slice(0, 3)}
                                   </button>
-                                </li>
-                              ))
-                            ) : (
-                              <li className="px-4 py-3 text-sm text-slate-400">
-                                No matches
-                              </li>
-                            )}
-                          </ul>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {dobPickerMode === "year" && (
+                            <div className="mt-4 grid grid-cols-4 gap-2 text-sm">
+                              {yearGrid.years.map((year) => {
+                                const isSelectedYear =
+                                  dobViewDate.getFullYear() === year;
+                                const isDisabled = year > currentYear;
+                                return (
+                                  <button
+                                    key={year}
+                                    type="button"
+                                    onClick={() => handleYearClick(year)}
+                                    disabled={isDisabled}
+                                    className={`rounded-xl px-3 py-2 text-center font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 ${
+                                      isSelectedYear
+                                        ? "bg-sky-500 text-white shadow"
+                                        : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                                    } ${
+                                      isDisabled
+                                        ? "cursor-not-allowed opacity-40"
+                                        : ""
+                                    }`}
+                                  >
+                                    {year}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {isFieldVisible("gender") && (
+                  <div>
+                    <div className="text-sm font-medium text-slate-700 mb-1">
+                      Pronoun (gender)
+                      {isFieldRequired("gender") && (
+                        <span className="text-rose-500">*</span>
+                      )}
+                    </div>
+                    <fieldset className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+                      <legend className="sr-only">Pronoun (gender)</legend>
+                      <div className="flex flex-wrap items-center gap-4">
+                        <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
+                          <input
+                            type="radio"
+                            name="pronoun"
+                            value="she-her"
+                            checked={formState.pronoun === "she-her"}
+                            onChange={handleInputChange}
+                            className="h-4 w-4 border-slate-300 text-sky-500 focus:ring-sky-200"
+                          />
+                          She/her (Female)
+                        </label>
+                        <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
+                          <input
+                            type="radio"
+                            name="pronoun"
+                            value="he-him"
+                            checked={formState.pronoun === "he-him"}
+                            onChange={handleInputChange}
+                            className="h-4 w-4 border-slate-300 text-sky-500 focus:ring-sky-200"
+                          />
+                          He/him (Male)
+                        </label>
+                      </div>
+                    </fieldset>
+                  </div>
+                )}
+
+                {isFieldVisible("domicile") && (
+                  <div>
+                    <div className="text-sm font-medium text-slate-700 mb-1">
+                      Domicile
+                      {isFieldRequired("domicile") && (
+                        <span className="text-rose-500">*</span>
+                      )}
+                    </div>
+                    <div
+                      ref={domicileDropdownRef}
+                      className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+                    >
+                      <div className="relative flex-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setIsDomicileDropdownOpen((previous) => !previous)
+                          }
+                          className="flex w-full items-center justify-between text-left text-sm text-slate-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200 focus-visible:rounded-md"
+                          aria-haspopup="listbox"
+                          aria-expanded={isDomicileDropdownOpen}
+                          aria-label="Select domicile"
+                        >
+                          <span
+                            className={
+                              selectedDomicile.id === "" ? "text-slate-400" : ""
+                            }
+                          >
+                            {selectedDomicile.label}
+                          </span>
+                          <FontAwesomeIcon
+                            icon={faChevronDown}
+                            className="ml-2 h-4 w-4 text-slate-400"
+                          />
+                        </button>
+                        {isDomicileDropdownOpen && (
+                          <ul
+                            className="absolute left-0 top-full z-10 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl border border-slate-100 bg-white py-2 shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)] custom-scrollbar"
+                            role="listbox"
+                          >
+                            {DOMICILE_OPTIONS.slice(1).map((domicile) => (
+                              <li key={domicile.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDomicile(domicile);
+                                    setIsDomicileDropdownOpen(false);
+                                  }}
+                                  className={`flex w-full items-center px-4 py-3 text-left text-sm transition ${
+                                    selectedDomicile.id === domicile.id
+                                      ? "bg-sky-50 text-slate-900"
+                                      : "text-slate-600 hover:bg-slate-50"
+                                  }`}
+                                  role="option"
+                                  aria-selected={
+                                    selectedDomicile.id === domicile.id
+                                  }
+                                >
+                                  {domicile.label}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isFieldVisible("phone_number") && (
+                  <div>
+                    <div className="text-sm font-medium text-slate-700 mb-1">
+                      Phone number
+                      {isFieldRequired("phone_number") && (
+                        <span className="text-rose-500">*</span>
+                      )}
+                    </div>
+                    <div
+                      ref={countryDropdownRef}
+                      className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+                    >
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setIsCountryDropdownOpen((previous) => {
+                              const next = !previous;
+                              if (!previous) {
+                                setCountrySearch("");
+                              }
+                              return next;
+                            })
+                          }
+                          className="inline-flex items-center gap-2 text-sm text-slate-600 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200 focus-visible:rounded-md pr-3 border-r border-slate-200 cursor-pointer"
+                          aria-haspopup="listbox"
+                          aria-expanded={isCountryDropdownOpen}
+                          aria-label="Select country code"
+                        >
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold uppercase text-slate-700">
+                            {selectedCountry.id}
+                          </span>
+                          <span className="text-sm font-semibold text-slate-600">
+                            {selectedCountry.dialCode}
+                          </span>
+                          <FontAwesomeIcon
+                            icon={faChevronDown}
+                            className="ml-1 h-3 w-3 text-slate-400"
+                          />
+                        </button>
+                        {isCountryDropdownOpen && (
+                          <div className="absolute left-0 top-full z-10 mt-2 w-52 rounded-2xl border border-slate-100 bg-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)]">
+                            <div className="px-3 pt-3">
+                              <label className="relative block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                <span className="sr-only">Search country</span>
+                                <input
+                                  type="text"
+                                  value={countrySearch}
+                                  onChange={(event) =>
+                                    setCountrySearch(event.target.value)
+                                  }
+                                  placeholder="Search country"
+                                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                />
+                              </label>
+                            </div>
+                            <ul
+                              className="custom-scrollbar max-h-60 overflow-y-auto py-2"
+                              role="listbox"
+                            >
+                              {filteredCountryOptions.length ? (
+                                filteredCountryOptions.map((country) => (
+                                  <li key={country.id}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedCountry(country);
+                                        setIsCountryDropdownOpen(false);
+                                        setCountrySearch("");
+                                      }}
+                                      className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition ${
+                                        selectedCountry.id === country.id
+                                          ? "bg-sky-50 text-slate-900"
+                                          : "text-slate-600 hover:bg-slate-50"
+                                      }`}
+                                      role="option"
+                                      aria-selected={
+                                        selectedCountry.id === country.id
+                                      }
+                                    >
+                                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold uppercase text-slate-700">
+                                        {country.id}
+                                      </span>
+                                      <div className="flex flex-col">
+                                        <span className="text-sm font-semibold">
+                                          {country.label}
+                                        </span>
+                                        <span className="text-xs text-slate-400">
+                                          {country.dialCode}
+                                        </span>
+                                      </div>
+                                    </button>
+                                  </li>
+                                ))
+                              ) : (
+                                <li className="px-4 py-3 text-sm text-slate-400">
+                                  No matches
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        type="tel"
+                        name="phoneNumber"
+                        value={formState.phoneNumber}
+                        onChange={handleInputChange}
+                        placeholder="81212345678"
+                        className="h-10 flex-1 border-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {isFieldVisible("email") && (
+                  <div>
+                    <div className="text-sm font-medium text-slate-700 mb-1">
+                      Email
+                      {isFieldRequired("email") && (
+                        <span className="text-rose-500">*</span>
+                      )}
+                    </div>
                     <input
-                      type="tel"
-                      name="phoneNumber"
-                      value={formState.phoneNumber}
+                      type="email"
+                      name="email"
+                      value={formState.email}
                       onChange={handleInputChange}
-                      placeholder="81212345678"
-                      className="h-10 flex-1 border-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                      placeholder="Enter your email address"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
                     />
                   </div>
-                </div>
+                )}
 
-                <div>
-                  <div className="text-sm font-medium text-slate-700 mb-1">
-                    Email<span className="text-rose-500">*</span>
+                {isFieldVisible("linkedin_link") && (
+                  <div>
+                    <div className="text-sm font-medium text-slate-700 mb-1">
+                      Link LinkedIn
+                      {isFieldRequired("linkedin_link") && (
+                        <span className="text-rose-500">*</span>
+                      )}
+                    </div>
+                    <input
+                      type="url"
+                      name="linkedin"
+                      value={formState.linkedin}
+                      onChange={handleInputChange}
+                      placeholder="https://linkedin.com/in/username"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
                   </div>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formState.email}
-                    onChange={handleInputChange}
-                    placeholder="Enter your email address"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                  />
-                </div>
-
-                <div>
-                  <div className="text-sm font-medium text-slate-700 mb-1">
-                    Link LinkedIn<span className="text-rose-500">*</span>
-                  </div>
-                  <input
-                    type="url"
-                    name="linkedin"
-                    value={formState.linkedin}
-                    onChange={handleInputChange}
-                    placeholder="https://linkedin.com/in/username"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                  />
-                </div>
+                )}
               </div>
             </section>
           </div>
