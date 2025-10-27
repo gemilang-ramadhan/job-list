@@ -1,11 +1,16 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCircleUser, faChevronLeft } from "@fortawesome/free-solid-svg-icons";
+import {
+  faCircleUser,
+  faChevronLeft,
+  faGripVertical,
+} from "@fortawesome/free-solid-svg-icons";
 import {
   useEffect,
   useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type DragEvent as ReactDragEvent,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getAllJobs, type StoredJob } from "../types/jobs";
@@ -103,6 +108,9 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
     buildDefaultWidths()
   );
+  const [columnOrder, setColumnOrder] = useState<string[]>(() =>
+    COLUMN_HEADERS.map((col) => col.key)
+  );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const resizingColumnRef = useRef<{
@@ -113,6 +121,10 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     maxWidth: number;
   } | null>(null);
   const [isResizing, setIsResizing] = useState(false);
+  const [draggedColumnKey, setDraggedColumnKey] = useState<string | null>(null);
+  const [dragOverColumnKey, setDragOverColumnKey] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     if (!jobId) {
@@ -217,6 +229,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   // Reset column widths when job changes
   useEffect(() => {
     setColumnWidths(buildDefaultWidths());
+    setColumnOrder(COLUMN_HEADERS.map((col) => col.key));
   }, [job?.id]);
 
   // Handle indeterminate checkbox state
@@ -302,6 +315,69 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
         : [...previous, candidateId]
     );
   };
+
+  const handleDragStart = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    columnKey: string
+  ) => {
+    setDraggedColumnKey(columnKey);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", columnKey);
+  };
+
+  const handleDragOver = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    columnKey: string
+  ) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (draggedColumnKey && draggedColumnKey !== columnKey) {
+      setDragOverColumnKey(columnKey);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverColumnKey(null);
+  };
+
+  const handleDrop = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    targetColumnKey: string
+  ) => {
+    event.preventDefault();
+    setDragOverColumnKey(null);
+
+    if (!draggedColumnKey || draggedColumnKey === targetColumnKey) {
+      setDraggedColumnKey(null);
+      return;
+    }
+
+    setColumnOrder((previous) => {
+      const newOrder = [...previous];
+      const draggedIndex = newOrder.indexOf(draggedColumnKey);
+      const targetIndex = newOrder.indexOf(targetColumnKey);
+
+      if (draggedIndex === -1 || targetIndex === -1) return previous;
+
+      newOrder.splice(draggedIndex, 1);
+      newOrder.splice(targetIndex, 0, draggedColumnKey);
+
+      return newOrder;
+    });
+
+    setDraggedColumnKey(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedColumnKey(null);
+    setDragOverColumnKey(null);
+  };
+
+  const orderedColumns = useMemo(() => {
+    return columnOrder
+      .map((key) => COLUMN_HEADERS.find((col) => col.key === key))
+      .filter((col): col is ColumnConfig => col !== undefined);
+  }, [columnOrder]);
 
   const jobTitle = useMemo(() => {
     return job?.formValues.jobName?.trim() || "Untitled Job";
@@ -400,7 +476,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                 <table className="min-w-[960px] w-full table-fixed border-collapse text-sm text-slate-700">
                   <colgroup>
                     <col style={{ width: "56px" }} />
-                    {COLUMN_HEADERS.map((column) => (
+                    {orderedColumns.map((column) => (
                       <col
                         key={column.key}
                         style={{
@@ -429,16 +505,32 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                           className="h-4 w-4 rounded border-slate-300 text-sky-500 focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
                         />
                       </th>
-                      {COLUMN_HEADERS.map((column, index) => {
+                      {orderedColumns.map((column, index) => {
                         const isFirst = index === 0;
-                        const isLast = index === COLUMN_HEADERS.length - 1;
+                        const isLast = index === orderedColumns.length - 1;
+                        const isDragging = draggedColumnKey === column.key;
+                        const isDragOver = dragOverColumnKey === column.key;
                         return (
                           <th
                             key={column.key}
                             scope="col"
-                            className={`relative py-4 text-left font-semibold ${
+                            draggable={!isResizing}
+                            onDragStart={(event) =>
+                              handleDragStart(event, column.key)
+                            }
+                            onDragOver={(event) =>
+                              handleDragOver(event, column.key)
+                            }
+                            onDragLeave={handleDragLeave}
+                            onDrop={(event) => handleDrop(event, column.key)}
+                            onDragEnd={handleDragEnd}
+                            className={`relative py-4 text-left font-semibold transition-opacity ${
                               isFirst ? "pl-4" : ""
-                            } ${isLast ? "pr-4" : ""}`}
+                            } ${isLast ? "pr-4" : ""} ${
+                              isDragging ? "opacity-40" : ""
+                            } ${isDragOver ? "bg-sky-100" : ""} ${
+                              !isResizing ? "cursor-move" : ""
+                            }`}
                             style={{
                               width:
                                 columnWidths[column.key] ?? column.defaultWidth,
@@ -447,7 +539,14 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                             }}
                           >
                             <div className="flex items-center justify-between gap-3">
-                              <span>{column.label}</span>
+                              <div className="flex items-center gap-2">
+                                <FontAwesomeIcon
+                                  icon={faGripVertical}
+                                  className="h-3 w-3 text-slate-400"
+                                  aria-hidden="true"
+                                />
+                                <span>{column.label}</span>
+                              </div>
                               <button
                                 type="button"
                                 onMouseDown={(event) =>
@@ -470,7 +569,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                     {candidates.length === 0 ? (
                       <tr className="border-t border-slate-200">
                         <td
-                          colSpan={COLUMN_HEADERS.length + 1}
+                          colSpan={orderedColumns.length + 1}
                           className="px-4 py-12 text-center text-sm text-slate-500"
                         >
                           <div className="flex flex-col items-center justify-center gap-2">
@@ -504,7 +603,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                                 className="h-4 w-4 rounded border-slate-300 text-sky-500 focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
                               />
                             </td>
-                            {COLUMN_HEADERS.map((column, index) => {
+                            {orderedColumns.map((column, index) => {
                               const width =
                                 columnWidths[column.key] ?? column.defaultWidth;
                               const value = resolveAttributeValue(
@@ -518,7 +617,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                               };
                               const isFirst = index === 0;
                               const isLast =
-                                index === COLUMN_HEADERS.length - 1;
+                                index === orderedColumns.length - 1;
                               if (column.key === "linkedin_link") {
                                 const isLink = value.startsWith("http");
                                 return (
