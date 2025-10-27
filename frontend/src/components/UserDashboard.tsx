@@ -7,6 +7,11 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { StoredJob } from "../types/jobs";
 import { JOB_DRAFT_STORAGE_KEY, parseActiveJobs } from "../types/jobs";
+import {
+  JOB_CANDIDATE_STORAGE_KEY,
+  JOB_CANDIDATE_UPDATED_EVENT,
+  getCandidatesFromStorage,
+} from "../types/candidates";
 import ApplyJobModal from "./ApplyJobModal";
 import JobDetailsModal from "./JobDetailsModal";
 
@@ -33,6 +38,11 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
     if (typeof window === "undefined") return [];
     const raw = window.localStorage.getItem(JOB_DRAFT_STORAGE_KEY);
     return parseActiveJobs(raw);
+  });
+  const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    const candidates = getCandidatesFromStorage();
+    return new Set(candidates.map((c) => c.jobId));
   });
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
@@ -88,11 +98,35 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
       if (event.key === JOB_DRAFT_STORAGE_KEY) {
         syncJobsFromStorage();
       }
+      if (event.key === JOB_CANDIDATE_STORAGE_KEY) {
+        const candidates = getCandidatesFromStorage();
+        setAppliedJobIds(new Set(candidates.map((c) => c.jobId)));
+      }
     };
 
     window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncAppliedJobs = () => {
+      if (typeof window === "undefined") return;
+      const candidates = getCandidatesFromStorage();
+      setAppliedJobIds(new Set(candidates.map((c) => c.jobId)));
+    };
+
+    const handleCandidateUpdate = () => {
+      syncAppliedJobs();
+    };
+
+    window.addEventListener(JOB_CANDIDATE_UPDATED_EVENT, handleCandidateUpdate);
+    return () => {
+      window.removeEventListener(
+        JOB_CANDIDATE_UPDATED_EVENT,
+        handleCandidateUpdate
+      );
     };
   }, []);
 
@@ -282,10 +316,17 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
                             />
                           </div>
                           <div className="flex flex-1 flex-col gap-2">
-                            <h3 className="text-base font-semibold text-slate-900">
-                              {job.formValues.jobName?.trim() ||
-                                "Untitled role"}
-                            </h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-semibold text-slate-900">
+                                {job.formValues.jobName?.trim() ||
+                                  "Untitled role"}
+                              </h3>
+                              {appliedJobIds.has(job.id) && (
+                                <span className="inline-flex items-center rounded-full bg-emerald-500 px-2.5 py-0.5 text-xs font-semibold text-white">
+                                  APPLIED
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm font-medium text-slate-500">
                               Jobby
                             </p>
@@ -336,6 +377,11 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
                             {selectedJobTypeLabel}
                           </span>
                         )}
+                        {appliedJobIds.has(selectedJob.id) && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-white">
+                            APPLIED
+                          </span>
+                        )}
                       </div>
                       <h2 className="mt-3 text-2xl font-semibold text-slate-900">
                         {selectedJob.formValues.jobName?.trim() ||
@@ -349,7 +395,8 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
                   <button
                     type="button"
                     onClick={() => setIsApplyModalOpen(true)}
-                    className="inline-flex items-center rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 shadow transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+                    disabled={appliedJobIds.has(selectedJob.id)}
+                    className="inline-flex items-center rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 shadow transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-amber-400"
                   >
                     Apply
                   </button>
@@ -417,6 +464,7 @@ function UserDashboard({ onLogout }: UserDashboardProps) {
           setIsDetailsModalOpen(false);
           setIsApplyModalOpen(true);
         }}
+        isApplied={selectedJob ? appliedJobIds.has(selectedJob.id) : false}
       />
     </div>
   );

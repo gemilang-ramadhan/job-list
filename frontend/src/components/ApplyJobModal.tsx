@@ -15,6 +15,7 @@ import {
   faChevronDown,
   faChevronLeft,
   faChevronRight,
+  faTimes,
 } from "@fortawesome/free-solid-svg-icons";
 import {
   appendCandidateToStorage,
@@ -39,6 +40,7 @@ type ApplyFormState = {
   phoneNumber: string;
   email: string;
   linkedin: string;
+  photoProfile: string;
 };
 
 const initialFormState: ApplyFormState = {
@@ -48,6 +50,7 @@ const initialFormState: ApplyFormState = {
   phoneNumber: "",
   email: "",
   linkedin: "",
+  photoProfile: "",
 };
 
 const COUNTRY_OPTIONS = [
@@ -119,8 +122,9 @@ const MONTH_LABELS = [
 ] as const;
 const MIN_YEAR = 1980;
 const MAX_YEAR = 2025;
-const YEAR_RANGE = Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, index) =>
-  MIN_YEAR + index
+const YEAR_RANGE = Array.from(
+  { length: MAX_YEAR - MIN_YEAR + 1 },
+  (_, index) => MIN_YEAR + index
 );
 
 type DobPickerMode = "day" | "month" | "year";
@@ -150,6 +154,13 @@ function ApplyJobModal({
   const countryDropdownRef = useRef<HTMLDivElement | null>(null);
   const domicileDropdownRef = useRef<HTMLDivElement | null>(null);
   const dobPickerRef = useRef<HTMLDivElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -208,8 +219,29 @@ function ApplyJobModal({
       setIsDomicileDropdownOpen(false);
       setIsDobPickerOpen(false);
       setDobPickerMode("day");
+      setCapturedPhoto(null);
+      setIsCameraOpen(false);
     }
   }, [isOpen]);
+
+  const stripCountryCode = (phoneValue: string): string => {
+    // Remove all whitespace first
+    const cleaned = phoneValue.replace(/\s+/g, "");
+
+    // Check if it starts with + and extract potential country code
+    if (cleaned.startsWith("+")) {
+      // Try to match against all available country dial codes
+      for (const country of COUNTRY_OPTIONS) {
+        const dialCode = country.dialCode.replace("+", "");
+        if (cleaned.startsWith(`+${dialCode}`)) {
+          // Return the phone number without the country code
+          return cleaned.substring(dialCode.length + 1); // +1 for the '+'
+        }
+      }
+    }
+
+    return phoneValue;
+  };
 
   const handleInputChange = (
     event: ChangeEvent<
@@ -217,7 +249,14 @@ function ApplyJobModal({
     >
   ) => {
     const { name, value } = event.target;
-    setFormState((prev) => ({ ...prev, [name]: value }));
+
+    // Strip country code from phone number input
+    if (name === "phoneNumber") {
+      const strippedValue = stripCountryCode(value);
+      setFormState((prev) => ({ ...prev, [name]: strippedValue }));
+    } else {
+      setFormState((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const isFormComplete = useMemo(() => {
@@ -228,7 +267,8 @@ function ApplyJobModal({
       selectedDomicile.id !== "" &&
       formState.phoneNumber.trim() !== "" &&
       formState.email.trim() !== "" &&
-      formState.linkedin.trim() !== ""
+      formState.linkedin.trim() !== "" &&
+      formState.photoProfile.trim() !== ""
     );
   }, [formState, selectedDomicile]);
 
@@ -349,12 +389,7 @@ function ApplyJobModal({
     return () => {
       window.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [
-    isOpen,
-    isCountryDropdownOpen,
-    isDomicileDropdownOpen,
-    isDobPickerOpen,
-  ]);
+  }, [isOpen, isCountryDropdownOpen, isDomicileDropdownOpen, isDobPickerOpen]);
 
   const resolvedJobTitle = (jobTitle ?? "").trim() || "Untitled role";
   const selectedDate = formState.dateOfBirth
@@ -576,6 +611,84 @@ function ApplyJobModal({
     setDobPickerMode("month");
   };
 
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: 640, height: 480 },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          setIsCameraReady(true);
+        };
+      }
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      alert("Could not access camera. Please check your permissions.");
+      setIsCameraOpen(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraReady(false);
+  };
+
+  const handleOpenCamera = () => {
+    setIsCameraOpen(true);
+    setCapturedPhoto(null);
+    setTimeout(() => {
+      startCamera();
+    }, 100);
+  };
+
+  const handleTakePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext("2d");
+      if (context) {
+        context.drawImage(video, 0, 0);
+        const photoDataUrl = canvas.toDataURL("image/png");
+        setCapturedPhoto(photoDataUrl);
+      }
+    }
+  };
+
+  const handleRetakePhoto = () => {
+    setCapturedPhoto(null);
+  };
+
+  const handleSubmitPhoto = () => {
+    if (capturedPhoto) {
+      setFormState((prev) => ({ ...prev, photoProfile: capturedPhoto }));
+      stopCamera();
+      setIsCameraOpen(false);
+      setCapturedPhoto(null);
+    }
+  };
+
+  const handleCloseCameraModal = () => {
+    stopCamera();
+    setIsCameraOpen(false);
+    setCapturedPhoto(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
+
   if (!isOpen) {
     return null;
   }
@@ -629,14 +742,22 @@ function ApplyJobModal({
             <section className="space-y-6">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
-                  Photo Profile
+                  Photo Profile<span className="text-rose-500">*</span>
                 </p>
                 <div className="mt-4 flex flex-col items-center gap-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-6 sm:flex-row sm:items-center sm:gap-6">
-                  <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-500">
-                    <FontAwesomeIcon
-                      icon={faCircleUser}
-                      className="h-12 w-12"
-                    />
+                  <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-500 overflow-hidden">
+                    {formState.photoProfile ? (
+                      <img
+                        src={formState.photoProfile}
+                        alt="Profile"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <FontAwesomeIcon
+                        icon={faCircleUser}
+                        className="h-12 w-12"
+                      />
+                    )}
                   </div>
                   <div className="flex flex-1 flex-col gap-3 items-center md:items-start">
                     <p className="text-sm text-slate-500">
@@ -644,10 +765,13 @@ function ApplyJobModal({
                     </p>
                     <button
                       type="button"
+                      onClick={handleOpenCamera}
                       className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200"
                     >
                       <FontAwesomeIcon icon={faCamera} className="h-4 w-4" />
-                      Take a Picture
+                      {formState.photoProfile
+                        ? "Retake Picture"
+                        : "Take a Picture"}
                     </button>
                   </div>
                 </div>
@@ -672,10 +796,7 @@ function ApplyJobModal({
                   <div className="text-sm font-medium text-slate-700 mb-1">
                     Date of birth<span className="text-rose-500">*</span>
                   </div>
-                  <div
-                    ref={dobPickerRef}
-                    className="relative"
-                  >
+                  <div ref={dobPickerRef} className="relative">
                     <button
                       type="button"
                       onClick={() => {
@@ -708,9 +829,7 @@ function ApplyJobModal({
                         isDobPickerOpen
                           ? "border-sky-400 focus-visible:outline-sky-200"
                           : "border-slate-200 focus-visible:outline-sky-200"
-                      } ${
-                        selectedDate ? "text-slate-900" : "text-slate-400"
-                      }`}
+                      } ${selectedDate ? "text-slate-900" : "text-slate-400"}`}
                       aria-haspopup="dialog"
                       aria-expanded={isDobPickerOpen}
                     >
@@ -730,7 +849,10 @@ function ApplyJobModal({
                             aria-label="Previous"
                             disabled={disablePrev}
                           >
-                            <FontAwesomeIcon icon={faChevronLeft} className="h-3 w-3" />
+                            <FontAwesomeIcon
+                              icon={faChevronLeft}
+                              className="h-3 w-3"
+                            />
                           </button>
                           <div className="flex items-center gap-2">
                             <button
@@ -765,7 +887,10 @@ function ApplyJobModal({
                             aria-label="Next"
                             disabled={disableNext}
                           >
-                            <FontAwesomeIcon icon={faChevronRight} className="h-3 w-3" />
+                            <FontAwesomeIcon
+                              icon={faChevronRight}
+                              className="h-3 w-3"
+                            />
                           </button>
                         </div>
                         {dobPickerMode === "day" && (
@@ -779,11 +904,13 @@ function ApplyJobModal({
                               {calendarDays.map((date) => {
                                 const isCurrentMonth =
                                   date.getMonth() === dobViewDate.getMonth() &&
-                                  date.getFullYear() === dobViewDate.getFullYear();
+                                  date.getFullYear() ===
+                                    dobViewDate.getFullYear();
                                 const isSelected =
                                   selectedDate &&
                                   date.getTime() === selectedDate.getTime();
-                                const isToday = date.getTime() === now.getTime();
+                                const isToday =
+                                  date.getTime() === now.getTime();
                                 const isDisabled =
                                   date > now || date < minSelectableDate;
 
@@ -809,26 +936,31 @@ function ApplyJobModal({
                                         : "hover:border-slate-200 hover:bg-slate-50"
                                     }`}
                                     aria-pressed={Boolean(isSelected)}
-                                    aria-label={new Intl.DateTimeFormat("en-US", {
-                                      day: "numeric",
-                                      month: "long",
-                                      year: "numeric",
-                                    }).format(date)}
+                                    aria-label={new Intl.DateTimeFormat(
+                                      "en-US",
+                                      {
+                                        day: "numeric",
+                                        month: "long",
+                                        year: "numeric",
+                                      }
+                                    ).format(date)}
                                   >
                                     {date.getDate()}
                                   </button>
                                 );
-                               })}
+                              })}
                             </div>
                           </>
                         )}
                         {dobPickerMode === "month" && (
                           <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
                             {MONTH_LABELS.map((monthName, index) => {
-                              const isSelectedMonth = dobViewDate.getMonth() === index;
+                              const isSelectedMonth =
+                                dobViewDate.getMonth() === index;
                               const isDisabled =
                                 visibleYear > currentYear ||
-                                (visibleYear === currentYear && index > currentMonth);
+                                (visibleYear === currentYear &&
+                                  index > currentMonth);
                               return (
                                 <button
                                   key={monthName}
@@ -840,7 +972,9 @@ function ApplyJobModal({
                                       ? "bg-sky-500 text-white shadow"
                                       : "bg-slate-50 text-slate-700 hover:bg-slate-100"
                                   } ${
-                                    isDisabled ? "cursor-not-allowed opacity-40" : ""
+                                    isDisabled
+                                      ? "cursor-not-allowed opacity-40"
+                                      : ""
                                   }`}
                                 >
                                   {monthName.slice(0, 3)}
@@ -852,7 +986,8 @@ function ApplyJobModal({
                         {dobPickerMode === "year" && (
                           <div className="mt-4 grid grid-cols-4 gap-2 text-sm">
                             {yearGrid.years.map((year) => {
-                              const isSelectedYear = dobViewDate.getFullYear() === year;
+                              const isSelectedYear =
+                                dobViewDate.getFullYear() === year;
                               const isDisabled = year > currentYear;
                               return (
                                 <button
@@ -865,7 +1000,9 @@ function ApplyJobModal({
                                       ? "bg-sky-500 text-white shadow"
                                       : "bg-slate-50 text-slate-700 hover:bg-slate-100"
                                   } ${
-                                    isDisabled ? "cursor-not-allowed opacity-40" : ""
+                                    isDisabled
+                                      ? "cursor-not-allowed opacity-40"
+                                      : ""
                                   }`}
                                 >
                                   {year}
@@ -1020,7 +1157,9 @@ function ApplyJobModal({
                               <input
                                 type="text"
                                 value={countrySearch}
-                                onChange={(event) => setCountrySearch(event.target.value)}
+                                onChange={(event) =>
+                                  setCountrySearch(event.target.value)
+                                }
                                 placeholder="Search country"
                                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
                               />
@@ -1130,6 +1269,103 @@ function ApplyJobModal({
           </div>
         </form>
       </div>
+
+      {/* Camera Modal */}
+      {isCameraOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 px-4 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseCameraModal();
+            }
+          }}
+        >
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h3 className="text-lg font-semibold text-slate-900">
+                {capturedPhoto ? "Review Your Photo" : "Capture Your Picture"}
+              </h3>
+              <button
+                type="button"
+                onClick={handleCloseCameraModal}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close camera"
+              >
+                <FontAwesomeIcon icon={faTimes} className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Camera/Preview Area */}
+            <div className="relative aspect-[4/3] w-full bg-slate-900">
+              {!capturedPhoto ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="h-full w-full object-cover"
+                  />
+                  {!isCameraReady && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
+                      <div className="text-center">
+                        <div className="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-4 border-sky-500 border-t-transparent"></div>
+                        <p className="text-sm text-white">Starting camera...</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <img
+                  src={capturedPhoto}
+                  alt="Captured"
+                  className="h-full w-full object-cover"
+                />
+              )}
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+
+            {/* Instructions & Actions */}
+            <div className="border-t border-slate-100 bg-white px-6 py-4">
+              <p className="mb-4 text-center text-sm text-slate-600">
+                {capturedPhoto
+                  ? "Click retake photo to take again"
+                  : "Position your face in the frame and click Take Photo"}
+              </p>
+              <div className="flex gap-3">
+                {!capturedPhoto ? (
+                  <button
+                    type="button"
+                    onClick={handleTakePhoto}
+                    disabled={!isCameraReady}
+                    className="w-full rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+                  >
+                    Take Photo
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleRetakePhoto}
+                      className="flex-1 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-300"
+                    >
+                      Retake Photo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSubmitPhoto}
+                      className="flex-1 rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+                    >
+                      Submit
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -14,6 +14,12 @@ import {
   parseDraftJobs,
   parseActiveJobs,
 } from "../types/jobs";
+import type { StoredCandidate } from "../types/candidates";
+import {
+  JOB_CANDIDATE_STORAGE_KEY,
+  JOB_CANDIDATE_UPDATED_EVENT,
+  getCandidatesFromStorage,
+} from "../types/candidates";
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   "full-time": "Full Time",
@@ -62,6 +68,9 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [activeJobs, setActiveJobs] = useState<StoredJob[]>(
     () => getJobsFromStorage().active
   );
+  const [candidates, setCandidates] = useState<StoredCandidate[]>(() =>
+    getCandidatesFromStorage()
+  );
   const [selectedJob, setSelectedJob] = useState<StoredJob | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -78,6 +87,30 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
     const { drafts, active } = getJobsFromStorage();
     setDraftJobs(drafts);
     setActiveJobs(active);
+    setCandidates(getCandidatesFromStorage());
+  }, []);
+
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === JOB_CANDIDATE_STORAGE_KEY) {
+        setCandidates(getCandidatesFromStorage());
+      }
+    };
+
+    const handleCandidateUpdate = () => {
+      setCandidates(getCandidatesFromStorage());
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener(JOB_CANDIDATE_UPDATED_EVENT, handleCandidateUpdate);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener(
+        JOB_CANDIDATE_UPDATED_EVENT,
+        handleCandidateUpdate
+      );
+    };
   }, []);
 
   useEffect(() => {
@@ -271,18 +304,35 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                           const formattedDate = formatDate(
                             job.publishedAt ?? job.savedAt
                           );
+                          const applicationCount = candidates.filter(
+                            (c) => c.jobId === job.id
+                          ).length;
+                          const applicationLabel =
+                            applicationCount === 1
+                              ? "1 application"
+                              : `${applicationCount} applications`;
 
                           return (
                             <article
                               key={job.id}
                               className="flex flex-col gap-4 rounded-2xl border border-emerald-100 bg-white p-6 shadow-md transition hover:shadow-md"
                             >
-                              <div className="flex items-start gap-3">
-                                <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
-                                  Active
-                                </span>
-                                <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                                  started on {formattedDate}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-3">
+                                  <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
+                                    Active
+                                  </span>
+                                  <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                                    started on {formattedDate}
+                                  </span>
+                                </div>
+                                <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-600">
+                                  <span className="sm:hidden">
+                                    {applicationCount}
+                                  </span>
+                                  <span className="hidden sm:inline">
+                                    {applicationLabel}
+                                  </span>
                                 </span>
                               </div>
 
@@ -375,18 +425,35 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             draft.formValues
                           );
                           const formattedDate = formatDate(draft.savedAt);
+                          const applicationCount = candidates.filter(
+                            (c) => c.jobId === draft.id
+                          ).length;
+                          const applicationLabel =
+                            applicationCount === 1
+                              ? "1 application"
+                              : `${applicationCount} applications`;
 
                           return (
                             <article
                               key={draft.id}
                               className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-md transition hover:shadow-md"
                             >
-                              <div className="flex items-start gap-3">
-                                <span className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-600">
-                                  Draft
-                                </span>
-                                <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                                  started on {formattedDate}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-3">
+                                  <span className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-600">
+                                    Draft
+                                  </span>
+                                  <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                                    started on {formattedDate}
+                                  </span>
+                                </div>
+                                <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-600">
+                                  <span className="sm:hidden">
+                                    {applicationCount}
+                                  </span>
+                                  <span className="hidden sm:inline">
+                                    {applicationLabel}
+                                  </span>
                                 </span>
                               </div>
 

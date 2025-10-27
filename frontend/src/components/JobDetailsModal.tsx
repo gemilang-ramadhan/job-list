@@ -22,6 +22,7 @@ type JobDetailsModalProps = {
   job: StoredJob | null;
   onClose: () => void;
   onApply: () => void;
+  isApplied?: boolean;
 };
 
 const buildSalaryLabel = (formValues: StoredJob["formValues"]) => {
@@ -43,6 +44,7 @@ function JobDetailsModal({
   job,
   onClose,
   onApply,
+  isApplied = false,
 }: JobDetailsModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
@@ -62,8 +64,7 @@ function JobDetailsModal({
           return;
         }
         const firstElement = focusableElements[0];
-        const lastElement =
-          focusableElements[focusableElements.length - 1];
+        const lastElement = focusableElements[focusableElements.length - 1];
         if (event.shiftKey && document.activeElement === firstElement) {
           lastElement.focus();
           event.preventDefault();
@@ -85,9 +86,11 @@ function JobDetailsModal({
   useEffect(() => {
     if (!isOpen) return;
     const timeout = window.setTimeout(() => {
-      dialogRef.current?.querySelector<HTMLElement>(
-        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
-      )?.focus();
+      dialogRef.current
+        ?.querySelector<HTMLElement>(
+          "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
+        )
+        ?.focus();
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [isOpen]);
@@ -160,6 +163,11 @@ function JobDetailsModal({
             >
               {jobTypeLabel}
             </span>
+            {isApplied && (
+              <span className="inline-flex items-center rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-white">
+                APPLIED
+              </span>
+            )}
           </div>
 
           <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 px-5 py-4 text-sm text-slate-600">
@@ -193,7 +201,8 @@ function JobDetailsModal({
           <button
             type="button"
             onClick={onApply}
-            className="inline-flex items-center justify-center rounded-xl bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+            disabled={isApplied}
+            className="inline-flex items-center justify-center rounded-xl bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-amber-400"
           >
             Apply
           </button>
