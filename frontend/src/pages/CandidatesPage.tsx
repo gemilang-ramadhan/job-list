@@ -380,6 +380,14 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     // Apply sorting
     if (sortBy) {
       result = [...result].sort((a, b) => {
+        // Special handling for submitted_at (date field)
+        if (sortBy === "submitted_at") {
+          const aDate = new Date(a.submittedAt).getTime();
+          const bDate = new Date(b.submittedAt).getTime();
+          return sortOrder === "asc" ? aDate - bDate : bDate - aDate;
+        }
+
+        // Regular string comparison for other fields
         const aValue = resolveAttributeValue(a, sortBy).toLowerCase();
         const bValue = resolveAttributeValue(b, sortBy).toLowerCase();
 
@@ -949,6 +957,23 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                           <div className="my-1 h-px bg-slate-200" />
                         </>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => handleSort("submitted_at")}
+                        className="flex w-full items-center justify-between px-4 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                        role="menuitem"
+                      >
+                        <span>Date Applied</span>
+                        {sortBy === "submitted_at" && (
+                          <FontAwesomeIcon
+                            icon={
+                              sortOrder === "asc" ? faArrowUpAZ : faArrowDownAZ
+                            }
+                            className="h-4 w-4 text-sky-500"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </button>
                       {COLUMN_HEADERS.map((column) => (
                         <button
                           key={column.key}
