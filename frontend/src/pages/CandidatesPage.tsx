@@ -5,6 +5,9 @@ import {
   faChevronRight,
   faChevronDown,
   faGripVertical,
+  faSearch,
+  faArrowUpAZ,
+  faArrowDownAZ,
 } from "@fortawesome/free-solid-svg-icons";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -101,10 +104,13 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   const [job, setJob] = useState<StoredJob | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const exportButtonRef = useRef<HTMLButtonElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const sortButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Candidates table state
   const [candidates, setCandidates] = useState<StoredCandidate[]>([]);
@@ -137,6 +143,13 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10; // Number of candidates per page
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Sorting state
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     if (!jobId) {
@@ -200,6 +213,28 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   }, [isExportMenuOpen]);
 
   useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isSortMenuOpen &&
+        sortMenuRef.current &&
+        !sortMenuRef.current.contains(event.target as Node) &&
+        sortButtonRef.current &&
+        !sortButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsSortMenuOpen(false);
+      }
+    };
+
+    if (isSortMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isSortMenuOpen]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "l") {
         event.preventDefault();
@@ -209,6 +244,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
       if (event.key === "Escape") {
         setIsMenuOpen(false);
         setIsExportMenuOpen(false);
+        setIsSortMenuOpen(false);
       }
     };
 
@@ -266,11 +302,46 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     setCurrentPage(1); // Reset to first page when data changes
   }, [job?.id, candidates.length]);
 
+  // Filter and sort candidates based on search query and sorting
+  const filteredCandidates = useMemo(() => {
+    let result = candidates;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const lowerQuery = searchQuery.toLowerCase().trim();
+      result = result.filter((candidate) => {
+        const fullName = resolveAttributeValue(candidate, "full_name");
+        return fullName.toLowerCase().includes(lowerQuery);
+      });
+    }
+
+    // Apply sorting
+    if (sortBy) {
+      result = [...result].sort((a, b) => {
+        const aValue = resolveAttributeValue(a, sortBy).toLowerCase();
+        const bValue = resolveAttributeValue(b, sortBy).toLowerCase();
+
+        if (aValue === "—" && bValue === "—") return 0;
+        if (aValue === "—") return 1;
+        if (bValue === "—") return -1;
+
+        const comparison = aValue.localeCompare(bValue, "en", {
+          numeric: true,
+          sensitivity: "base",
+        });
+
+        return sortOrder === "asc" ? comparison : -comparison;
+      });
+    }
+
+    return result;
+  }, [candidates, searchQuery, sortBy, sortOrder]);
+
   // Pagination logic
-  const totalPages = Math.ceil(candidates.length / pageSize);
+  const totalPages = Math.ceil(filteredCandidates.length / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
-  const paginatedCandidates = candidates.slice(startIndex, endIndex);
+  const paginatedCandidates = filteredCandidates.slice(startIndex, endIndex);
 
   // Handle page changes
   const goToPage = (page: number) => {
@@ -290,9 +361,10 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
 
   // Handle indeterminate checkbox state
   const allSelected =
-    candidates.length > 0 && selectedIds.length === candidates.length;
+    filteredCandidates.length > 0 &&
+    selectedIds.length === filteredCandidates.length;
   const isIndeterminate =
-    selectedIds.length > 0 && selectedIds.length < candidates.length;
+    selectedIds.length > 0 && selectedIds.length < filteredCandidates.length;
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -360,7 +432,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     if (allSelected) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(candidates.map((candidate) => candidate.id));
+      setSelectedIds(filteredCandidates.map((candidate) => candidate.id));
     }
   };
 
@@ -441,10 +513,15 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
 
   const candidateCountLabel = useMemo(() => {
     if (!candidates.length) return "No candidates yet";
-    return candidates.length === 1
-      ? "1 candidate"
-      : `${candidates.length} candidates`;
-  }, [candidates.length]);
+    const count = filteredCandidates.length;
+    const total = candidates.length;
+    if (searchQuery.trim() && count !== total) {
+      return count === 1
+        ? `1 candidate (filtered from ${total})`
+        : `${count} candidates (filtered from ${total})`;
+    }
+    return count === 1 ? "1 candidate" : `${count} candidates`;
+  }, [candidates.length, filteredCandidates.length, searchQuery]);
 
   const exportCandidates = useMemo(() => {
     if (selectedIds.length === 0) {
@@ -513,14 +590,34 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     }
   }, [canExport]);
 
+  const handleSort = (columnKey: string) => {
+    if (sortBy === columnKey) {
+      // Toggle sort order if same column
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      // Set new column and default to ascending
+      setSortBy(columnKey);
+      setSortOrder("asc");
+    }
+    setIsSortMenuOpen(false);
+  };
+
+  const clearSort = () => {
+    setSortBy(null);
+    setSortOrder("asc");
+    setIsSortMenuOpen(false);
+  };
+
   const handleLogout = () => {
     setIsMenuOpen(false);
     setIsExportMenuOpen(false);
+    setIsSortMenuOpen(false);
     onLogout();
   };
 
   const handleBackToJobs = () => {
     setIsExportMenuOpen(false);
+    setIsSortMenuOpen(false);
     navigate("/admin");
   };
 
@@ -590,7 +687,78 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
               <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
                 <span>{candidateCountLabel}</span>
                 <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-flex" />
-                <div className="relative mt-2 w-full sm:ml-auto sm:mt-0 sm:w-auto">
+                <div className="relative mt-2 flex gap-2 w-full sm:ml-auto sm:mt-0 sm:w-auto">
+                  <button
+                    ref={sortButtonRef}
+                    type="button"
+                    onClick={() => setIsSortMenuOpen((prev) => !prev)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 sm:w-auto"
+                    aria-haspopup="menu"
+                    aria-expanded={isSortMenuOpen}
+                  >
+                    {sortBy ? (
+                      <FontAwesomeIcon
+                        icon={sortOrder === "asc" ? faArrowUpAZ : faArrowDownAZ}
+                        className="h-4 w-4 text-sky-500"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <FontAwesomeIcon
+                        icon={faArrowUpAZ}
+                        className="h-4 w-4 text-slate-400"
+                        aria-hidden="true"
+                      />
+                    )}
+                    Sort
+                    <FontAwesomeIcon
+                      icon={faChevronDown}
+                      className="h-4 w-4 text-slate-400"
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {isSortMenuOpen && (
+                    <div
+                      ref={sortMenuRef}
+                      className="absolute left-0 right-auto top-full z-40 mt-2 w-full min-w-[200px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_22px_45px_-25px_rgba(15,23,42,0.45)] sm:left-auto sm:right-0"
+                      role="menu"
+                    >
+                      {sortBy && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={clearSort}
+                            className="flex w-full items-center justify-between px-4 py-2 text-left text-sm font-medium text-red-600 transition hover:bg-slate-50"
+                            role="menuitem"
+                          >
+                            Clear sorting
+                          </button>
+                          <div className="my-1 h-px bg-slate-200" />
+                        </>
+                      )}
+                      {COLUMN_HEADERS.map((column) => (
+                        <button
+                          key={column.key}
+                          type="button"
+                          onClick={() => handleSort(column.key)}
+                          className="flex w-full items-center justify-between px-4 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                          role="menuitem"
+                        >
+                          <span>{column.label}</span>
+                          {sortBy === column.key && (
+                            <FontAwesomeIcon
+                              icon={
+                                sortOrder === "asc"
+                                  ? faArrowUpAZ
+                                  : faArrowDownAZ
+                              }
+                              className="h-4 w-4 text-sky-500"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <button
                     ref={exportButtonRef}
                     type="button"
@@ -635,6 +803,30 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* Search Bar */}
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm ">
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <FontAwesomeIcon
+                    icon={faSearch}
+                    className="h-4 w-4 text-slate-400"
+                    aria-hidden="true"
+                  />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search by candidate name..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1); // Reset to first page when searching
+                  }}
+                  className="block w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 placeholder-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  aria-label="Search candidates by name"
+                />
               </div>
             </div>
 
@@ -741,11 +933,14 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                         >
                           <div className="flex flex-col items-center justify-center gap-2">
                             <span className="font-medium text-slate-600">
-                              Belum ada kandidat
+                              {searchQuery.trim()
+                                ? "No candidates found matching your search"
+                                : "Belum ada kandidat"}
                             </span>
                             <span className="text-xs text-slate-400">
-                              Kandidat yang melamar akan muncul di tabel ini
-                              secara otomatis.
+                              {searchQuery.trim()
+                                ? "Try a different search term"
+                                : "Kandidat yang melamar akan muncul di tabel ini secara otomatis."}
                             </span>
                           </div>
                         </td>
@@ -868,10 +1063,12 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                       Showing{" "}
                       <span className="font-medium">{startIndex + 1}</span> to{" "}
                       <span className="font-medium">
-                        {Math.min(endIndex, candidates.length)}
+                        {Math.min(endIndex, filteredCandidates.length)}
                       </span>{" "}
                       of{" "}
-                      <span className="font-medium">{candidates.length}</span>{" "}
+                      <span className="font-medium">
+                        {filteredCandidates.length}
+                      </span>{" "}
                       results
                     </p>
                   </div>
