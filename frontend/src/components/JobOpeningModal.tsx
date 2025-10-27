@@ -211,7 +211,12 @@ function JobOpeningModal({
 
   const persistJob = (
     status: StoredJob["status"],
-    options?: { onDraftSavedOptions?: { isPublishingNew?: boolean; isActiveUpdate?: boolean } }
+    options?: {
+      onDraftSavedOptions?: {
+        isPublishingNew?: boolean;
+        isActiveUpdate?: boolean;
+      };
+    }
   ) => {
     const now = new Date();
     const draftId = editingDraftId ?? generateDraftId(now);
@@ -392,6 +397,73 @@ function JobOpeningModal({
     setMaxSalary(formatted);
   };
 
+  const renderActionButtons = () => {
+    if (isEditingExisting) {
+      return (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <button
+            type="button"
+            onClick={handleDeleteDraftClick}
+            className="w-full rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-200 sm:w-auto"
+          >
+            {isEditingActive ? "Delete Job" : "Delete Draft"}
+          </button>
+          <button
+            type="button"
+            onClick={
+              isEditingActive ? handleSaveAsDraftClick : handleSaveDraftClick
+            }
+            className="w-full rounded-xl bg-amber-400 px-6 py-3 text-sm font-semibold text-slate-800 shadow transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 sm:w-auto"
+          >
+            {isEditingActive ? "Save As Draft" : "Save Draft"}
+          </button>
+          {isEditingActive ? (
+            <button
+              type="button"
+              disabled={!isFormComplete}
+              onClick={handleSaveActiveChangesClick}
+              className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto sm:min-w-[180px] ${
+                isFormComplete
+                  ? "bg-sky-500 text-white shadow hover:bg-sky-600 focus-visible:outline-sky-500"
+                  : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
+              }`}
+            >
+              Save Changes
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!isFormComplete}
+              onClick={handlePublishJobClick}
+              className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto sm:min-w-[180px] ${
+                isFormComplete
+                  ? "bg-sky-500 text-white shadow hover:bg-sky-600 focus-visible:outline-sky-500"
+                  : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
+              }`}
+            >
+              Publish Job
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        disabled={!isFormComplete}
+        onClick={handlePublishJobClick}
+        className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+          isFormComplete
+            ? "bg-sky-500 text-white hover:bg-sky-600 focus-visible:outline-sky-500"
+            : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
+        }`}
+      >
+        Publish Job
+      </button>
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -417,7 +489,10 @@ function JobOpeningModal({
         <div className="max-h-[calc(90vh-200px)] overflow-y-auto custom-scrollbar px-8 py-6">
           <div className="space-y-6">
             <div>
-              <label htmlFor="jobName" className="mb-2 block text-sm text-slate-700">
+              <label
+                htmlFor="jobName"
+                className="mb-2 block text-sm text-slate-700"
+              >
                 Job Name<span className="text-red-500">*</span>
               </label>
               <input
@@ -644,67 +719,13 @@ function JobOpeningModal({
               </div>
             </div>
           </div>
+          <div className="mt-8 border-t border-slate-100 pt-6 sm:hidden">
+            {renderActionButtons()}
+          </div>
         </div>
 
-        <div className="border-t border-slate-100 px-8 py-6">
-          {isEditingExisting ? (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-              <button
-                type="button"
-                onClick={handleDeleteDraftClick}
-                className="w-full rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-200 sm:w-auto"
-              >
-                {isEditingActive ? "Delete Job" : "Delete Draft"}
-              </button>
-              <button
-                type="button"
-                onClick={isEditingActive ? handleSaveAsDraftClick : handleSaveDraftClick}
-                className="w-full rounded-xl bg-amber-400 px-6 py-3 text-sm font-semibold text-slate-800 shadow transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 sm:w-auto"
-              >
-                {isEditingActive ? "Save As Draft" : "Save Draft"}
-              </button>
-              {isEditingActive ? (
-                <button
-                  type="button"
-                  disabled={!isFormComplete}
-                  onClick={handleSaveActiveChangesClick}
-                  className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto sm:min-w-[180px] ${
-                    isFormComplete
-                      ? "bg-sky-500 text-white shadow hover:bg-sky-600 focus-visible:outline-sky-500"
-                      : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
-                  }`}
-                >
-                  Save Changes
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={!isFormComplete}
-                  onClick={handlePublishJobClick}
-                  className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto sm:min-w-[180px] ${
-                    isFormComplete
-                      ? "bg-sky-500 text-white shadow hover:bg-sky-600 focus-visible:outline-sky-500"
-                      : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
-                  }`}
-                >
-                  Publish Job
-                </button>
-              )}
-            </div>
-          ) : (
-            <button
-              type="button"
-              disabled={!isFormComplete}
-              onClick={handlePublishJobClick}
-              className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                isFormComplete
-                  ? "bg-sky-500 text-white hover:bg-sky-600 focus-visible:outline-sky-500"
-                  : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
-              }`}
-            >
-              Publish Job
-            </button>
-          )}
+        <div className="border-t border-slate-100 px-8 py-6 hidden sm:block">
+          {renderActionButtons()}
         </div>
       </div>
 
