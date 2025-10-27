@@ -8,6 +8,7 @@ import {
   faSearch,
   faArrowUpAZ,
   faArrowDownAZ,
+  faFilter,
 } from "@fortawesome/free-solid-svg-icons";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -105,12 +106,15 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const exportButtonRef = useRef<HTMLButtonElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const sortButtonRef = useRef<HTMLButtonElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
+  const filterButtonRef = useRef<HTMLButtonElement | null>(null);
+  const filterMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Candidates table state
   const [candidates, setCandidates] = useState<StoredCandidate[]>([]);
@@ -150,6 +154,11 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   // Sorting state
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  // Filter state
+  const [columnFilters, setColumnFilters] = useState<
+    Record<string, Set<string>>
+  >({});
 
   useEffect(() => {
     if (!jobId) {
@@ -235,6 +244,28 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
   }, [isSortMenuOpen]);
 
   useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isFilterMenuOpen &&
+        filterMenuRef.current &&
+        !filterMenuRef.current.contains(event.target as Node) &&
+        filterButtonRef.current &&
+        !filterButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsFilterMenuOpen(false);
+      }
+    };
+
+    if (isFilterMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isFilterMenuOpen]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "l") {
         event.preventDefault();
@@ -245,6 +276,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
         setIsMenuOpen(false);
         setIsExportMenuOpen(false);
         setIsSortMenuOpen(false);
+        setIsFilterMenuOpen(false);
       }
     };
 
@@ -302,7 +334,27 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     setCurrentPage(1); // Reset to first page when data changes
   }, [job?.id, candidates.length]);
 
-  // Filter and sort candidates based on search query and sorting
+  // Get unique values for each column for filtering
+  const columnUniqueValues = useMemo(() => {
+    const uniqueValues: Record<string, Set<string>> = {};
+    // Only allow filtering on gender column
+    const filterableColumns = COLUMN_HEADERS.filter(
+      (col) => col.key === "gender"
+    );
+    filterableColumns.forEach((column) => {
+      const values = new Set<string>();
+      candidates.forEach((candidate) => {
+        const value = resolveAttributeValue(candidate, column.key);
+        if (value && value !== "—") {
+          values.add(value);
+        }
+      });
+      uniqueValues[column.key] = values;
+    });
+    return uniqueValues;
+  }, [candidates]);
+
+  // Filter and sort candidates based on search query, column filters, and sorting
   const filteredCandidates = useMemo(() => {
     let result = candidates;
 
@@ -314,6 +366,16 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
         return fullName.toLowerCase().includes(lowerQuery);
       });
     }
+
+    // Apply column filters
+    Object.entries(columnFilters).forEach(([columnKey, selectedValues]) => {
+      if (selectedValues.size > 0) {
+        result = result.filter((candidate) => {
+          const value = resolveAttributeValue(candidate, columnKey);
+          return selectedValues.has(value);
+        });
+      }
+    });
 
     // Apply sorting
     if (sortBy) {
@@ -335,7 +397,7 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     }
 
     return result;
-  }, [candidates, searchQuery, sortBy, sortOrder]);
+  }, [candidates, searchQuery, columnFilters, sortBy, sortOrder]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredCandidates.length / pageSize);
@@ -511,6 +573,13 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     return job?.formValues.jobName?.trim() || "Untitled Job";
   }, [job?.formValues.jobName]);
 
+  const activeFilterCount = useMemo(() => {
+    return Object.values(columnFilters).reduce(
+      (count, filterSet) => count + filterSet.size,
+      0
+    );
+  }, [columnFilters]);
+
   const candidateCountLabel = useMemo(() => {
     if (!candidates.length) return "No candidates yet";
     const count = filteredCandidates.length;
@@ -608,16 +677,56 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
     setIsSortMenuOpen(false);
   };
 
+  const toggleColumnFilter = (columnKey: string, value: string) => {
+    setColumnFilters((prev) => {
+      const newFilters = { ...prev };
+      if (!newFilters[columnKey]) {
+        newFilters[columnKey] = new Set();
+      } else {
+        newFilters[columnKey] = new Set(newFilters[columnKey]);
+      }
+
+      if (newFilters[columnKey].has(value)) {
+        newFilters[columnKey].delete(value);
+        if (newFilters[columnKey].size === 0) {
+          delete newFilters[columnKey];
+        }
+      } else {
+        newFilters[columnKey].add(value);
+      }
+
+      return newFilters;
+    });
+    setCurrentPage(1);
+  };
+
+  const clearColumnFilter = (columnKey: string) => {
+    setColumnFilters((prev) => {
+      const newFilters = { ...prev };
+      delete newFilters[columnKey];
+      return newFilters;
+    });
+    setCurrentPage(1);
+  };
+
+  const clearAllFilters = () => {
+    setColumnFilters({});
+    setIsFilterMenuOpen(false);
+    setCurrentPage(1);
+  };
+
   const handleLogout = () => {
     setIsMenuOpen(false);
     setIsExportMenuOpen(false);
     setIsSortMenuOpen(false);
+    setIsFilterMenuOpen(false);
     onLogout();
   };
 
   const handleBackToJobs = () => {
     setIsExportMenuOpen(false);
     setIsSortMenuOpen(false);
+    setIsFilterMenuOpen(false);
     navigate("/admin");
   };
 
@@ -688,6 +797,111 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
                 <span>{candidateCountLabel}</span>
                 <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-flex" />
                 <div className="relative mt-2 flex gap-2 w-full sm:ml-auto sm:mt-0 sm:w-auto">
+                  <button
+                    ref={filterButtonRef}
+                    type="button"
+                    onClick={() => setIsFilterMenuOpen((prev) => !prev)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200 sm:w-auto"
+                    aria-haspopup="menu"
+                    aria-expanded={isFilterMenuOpen}
+                  >
+                    <FontAwesomeIcon
+                      icon={faFilter}
+                      className={`h-4 w-4 ${
+                        activeFilterCount > 0
+                          ? "text-sky-500"
+                          : "text-slate-400"
+                      }`}
+                      aria-hidden="true"
+                    />
+                    Filter
+                    {activeFilterCount > 0 && (
+                      <span className="inline-flex items-center justify-center rounded-full bg-sky-500 px-2 py-0.5 text-xs font-bold text-white">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                    <FontAwesomeIcon
+                      icon={faChevronDown}
+                      className="h-4 w-4 text-slate-400"
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {isFilterMenuOpen && (
+                    <div
+                      ref={filterMenuRef}
+                      className="absolute left-0 right-auto top-full z-40 mt-2 w-full min-w-[280px] max-h-[400px] overflow-y-auto custom-scrollbar-thin rounded-xl border border-slate-200 bg-white py-1 shadow-[0_22px_45px_-25px_rgba(15,23,42,0.45)] sm:left-auto sm:right-0"
+                      role="menu"
+                    >
+                      {activeFilterCount > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={clearAllFilters}
+                            className="flex w-full items-center justify-between px-4 py-2 text-left text-sm font-medium text-red-600 transition hover:bg-slate-50"
+                            role="menuitem"
+                          >
+                            Clear all filters
+                          </button>
+                          <div className="my-1 h-px bg-slate-200" />
+                        </>
+                      )}
+                      {COLUMN_HEADERS.map((column) => {
+                        const uniqueValues = Array.from(
+                          columnUniqueValues[column.key] || []
+                        ).sort();
+                        const selectedValues =
+                          columnFilters[column.key] || new Set();
+                        const hasSelectedValues = selectedValues.size > 0;
+
+                        if (uniqueValues.length === 0) return null;
+
+                        return (
+                          <div
+                            key={column.key}
+                            className="border-b border-slate-100 last:border-0"
+                          >
+                            <div className="flex items-center justify-between px-4 py-2 bg-slate-50">
+                              <span className="text-xs font-semibold uppercase text-slate-600">
+                                {column.label}
+                              </span>
+                              {hasSelectedValues && (
+                                <button
+                                  type="button"
+                                  onClick={() => clearColumnFilter(column.key)}
+                                  className="text-xs font-medium text-red-600 hover:text-red-700"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                            <div className="py-1">
+                              {uniqueValues.slice(0, 10).map((value) => (
+                                <label
+                                  key={value}
+                                  className="flex items-center gap-2 px-4 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedValues.has(value)}
+                                    onChange={() =>
+                                      toggleColumnFilter(column.key, value)
+                                    }
+                                    className="h-4 w-4 rounded border-slate-300 text-sky-500 focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+                                  />
+                                  <span className="truncate">{value}</span>
+                                </label>
+                              ))}
+                              {uniqueValues.length > 10 && (
+                                <div className="px-4 py-1 text-xs text-slate-400">
+                                  +{uniqueValues.length - 10} more values
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   <button
                     ref={sortButtonRef}
                     type="button"
