@@ -487,9 +487,6 @@ function CandidatesPage({ onLogout }: CandidatesPageProps) {
               <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
                 <span>{candidateCountLabel}</span>
                 <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-flex" />
-                <span className="text-xs uppercase tracking-wide text-slate-400">
-                  Manage applicants linked to this opening
-                </span>
               </div>
             </div>
 

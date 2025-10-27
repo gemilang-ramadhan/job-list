@@ -72,6 +72,8 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
     getCandidatesFromStorage()
   );
   const [selectedJob, setSelectedJob] = useState<StoredJob | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [notification, setNotification] = useState<{
@@ -89,6 +91,14 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setActiveJobs(active);
     setCandidates(getCandidatesFromStorage());
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
@@ -201,6 +211,23 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const hasActiveJobs = activeJobs.length > 0;
   const hasAnyJobs = hasDrafts || hasActiveJobs;
 
+  const filterJobsByName = (jobs: StoredJob[]) => {
+    if (!debouncedSearchQuery.trim()) {
+      return jobs;
+    }
+    const query = debouncedSearchQuery.toLowerCase().trim();
+    return jobs.filter((job) => {
+      const jobName = job.formValues.jobName?.toLowerCase().trim() || "";
+      return jobName.includes(query);
+    });
+  };
+
+  const filteredActiveJobs = filterJobsByName(activeJobs);
+  const filteredDraftJobs = filterJobsByName(draftJobs);
+  const hasFilteredActiveJobs = filteredActiveJobs.length > 0;
+  const hasFilteredDrafts = filteredDraftJobs.length > 0;
+  const hasFilteredJobs = hasFilteredActiveJobs || hasFilteredDrafts;
+
   const formatDate = (value?: string) => {
     if (!value) return "3 Sep 2025";
     const parsedDate = new Date(value);
@@ -265,6 +292,8 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <input
                   type="search"
                   placeholder="Search by job details"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-6 py-4 pr-16 text-sm text-slate-600 shadow-sm transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
                 />
                 <FontAwesomeIcon
@@ -275,18 +304,18 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
               {hasAnyJobs ? (
                 <section className="flex flex-col gap-10">
-                  {hasActiveJobs && (
+                  {hasFilteredActiveJobs && (
                     <div>
                       <div className="flex items-center justify-between">
                         <h2 className="text-lg font-semibold text-slate-900">
                           Active Jobs
                         </h2>
                         <span className="text-sm font-medium text-slate-500">
-                          {activeJobs.length} active
+                          {filteredActiveJobs.length} active
                         </span>
                       </div>
                       <div className="mt-4 flex flex-col gap-6">
-                        {activeJobs.map((job) => {
+                        {filteredActiveJobs.map((job) => {
                           const title =
                             job.formValues.jobName?.trim() || "Untitled job";
                           const jobTypeValue = job.formValues.jobType?.trim();
@@ -396,18 +425,18 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </div>
                   )}
 
-                  {hasDrafts && (
+                  {hasFilteredDrafts && (
                     <div>
                       <div className="flex items-center justify-between">
                         <h2 className="text-lg font-semibold text-slate-900">
                           Draft Jobs
                         </h2>
                         <span className="text-sm font-medium text-slate-500">
-                          {draftJobs.length} draft
+                          {filteredDraftJobs.length} draft
                         </span>
                       </div>
                       <div className="mt-4 flex flex-col gap-6">
-                        {draftJobs.map((draft) => {
+                        {filteredDraftJobs.map((draft) => {
                           const title =
                             draft.formValues.jobName?.trim() || "Untitled job";
                           const jobTypeValue = draft.formValues.jobType?.trim();
@@ -503,6 +532,22 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                           );
                         })}
                       </div>
+                    </div>
+                  )}
+
+                  {!hasFilteredJobs && debouncedSearchQuery.trim() && (
+                    <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-100 bg-white px-6 py-16 text-center">
+                      <FontAwesomeIcon
+                        icon={faSearch}
+                        className="h-16 w-16 text-slate-300"
+                      />
+                      <h3 className="mt-6 text-lg font-semibold text-slate-900">
+                        No jobs found
+                      </h3>
+                      <p className="mt-2 max-w-sm text-sm text-slate-500">
+                        No jobs match "{debouncedSearchQuery}". Try a different
+                        search term.
+                      </p>
                     </div>
                   )}
                 </section>
