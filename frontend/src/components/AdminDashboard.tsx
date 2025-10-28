@@ -13,6 +13,7 @@ import {
   JOB_DRAFT_STORAGE_KEY,
   parseDraftJobs,
   parseActiveJobs,
+  parseInactiveJobs,
 } from "../types/jobs";
 import type { StoredCandidate } from "../types/candidates";
 import {
@@ -44,13 +45,18 @@ const buildSalaryLabel = (formValues: StoredJob["formValues"]) => {
 
 const getJobsFromStorage = () => {
   if (typeof window === "undefined") {
-    return { drafts: [] as StoredJob[], active: [] as StoredJob[] };
+    return {
+      drafts: [] as StoredJob[],
+      active: [] as StoredJob[],
+      inactive: [] as StoredJob[],
+    };
   }
 
   const rawValue = window.localStorage.getItem(JOB_DRAFT_STORAGE_KEY);
   return {
     drafts: parseDraftJobs(rawValue),
     active: parseActiveJobs(rawValue),
+    inactive: parseInactiveJobs(rawValue),
   };
 };
 
@@ -67,6 +73,9 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
   );
   const [activeJobs, setActiveJobs] = useState<StoredJob[]>(
     () => getJobsFromStorage().active
+  );
+  const [inactiveJobs, setInactiveJobs] = useState<StoredJob[]>(
+    () => getJobsFromStorage().inactive
   );
   const [candidates, setCandidates] = useState<StoredCandidate[]>(() =>
     getCandidatesFromStorage()
@@ -86,9 +95,10 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const { drafts, active } = getJobsFromStorage();
+    const { drafts, active, inactive } = getJobsFromStorage();
     setDraftJobs(drafts);
     setActiveJobs(active);
+    setInactiveJobs(inactive);
     setCandidates(getCandidatesFromStorage());
   }, []);
 
@@ -171,6 +181,10 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
       const filtered = prev.filter((item) => item.id !== job.id);
       return job.status === "active" ? [job, ...filtered] : filtered;
     });
+    setInactiveJobs((prev) => {
+      const filtered = prev.filter((item) => item.id !== job.id);
+      return job.status === "inactive" ? [job, ...filtered] : filtered;
+    });
     setSelectedJob((prev) => (prev && prev.id === job.id ? job : prev));
 
     if (job.status === "active" && options?.isActiveUpdate) {
@@ -209,7 +223,8 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const hasDrafts = draftJobs.length > 0;
   const hasActiveJobs = activeJobs.length > 0;
-  const hasAnyJobs = hasDrafts || hasActiveJobs;
+  const hasInactiveJobs = inactiveJobs.length > 0;
+  const hasAnyJobs = hasDrafts || hasActiveJobs || hasInactiveJobs;
 
   const filterJobsByName = (jobs: StoredJob[]) => {
     if (!debouncedSearchQuery.trim()) {
@@ -223,10 +238,13 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
   };
 
   const filteredActiveJobs = filterJobsByName(activeJobs);
+  const filteredInactiveJobs = filterJobsByName(inactiveJobs);
   const filteredDraftJobs = filterJobsByName(draftJobs);
   const hasFilteredActiveJobs = filteredActiveJobs.length > 0;
+  const hasFilteredInactiveJobs = filteredInactiveJobs.length > 0;
   const hasFilteredDrafts = filteredDraftJobs.length > 0;
-  const hasFilteredJobs = hasFilteredActiveJobs || hasFilteredDrafts;
+  const hasFilteredJobs =
+    hasFilteredActiveJobs || hasFilteredInactiveJobs || hasFilteredDrafts;
 
   const formatDate = (value?: string) => {
     if (!value) return "3 Sep 2025";
@@ -302,6 +320,19 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 />
               </div>
 
+              <div className="lg:hidden sticky top-0 z-40 bg-white pt-4 pb-2 -mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedJob(null);
+                    setIsJobModalOpen(true);
+                  }}
+                  className="w-full inline-flex items-center justify-center rounded-xl bg-cyan-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+                >
+                  Create a new job
+                </button>
+              </div>
+
               {hasAnyJobs ? (
                 <section className="flex flex-col gap-10">
                   {hasFilteredActiveJobs && (
@@ -350,6 +381,127 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                 <div className="flex items-start gap-3">
                                   <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-600">
                                     Active
+                                  </span>
+                                  <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                                    started on {formattedDate}
+                                  </span>
+                                </div>
+                                <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-600">
+                                  <span className="sm:hidden">
+                                    {applicationCount}
+                                  </span>
+                                  <span className="hidden sm:inline">
+                                    {applicationLabel}
+                                  </span>
+                                </span>
+                              </div>
+
+                              <h3 className="text-xl font-semibold text-slate-900">
+                                {title}
+                              </h3>
+
+                              {(jobTypeLabel || candidatesLabel) && (
+                                <div className="flex flex-wrap gap-2">
+                                  {jobTypeLabel && (
+                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                      {jobTypeLabel}
+                                    </span>
+                                  )}
+                                  {candidatesLabel && (
+                                    <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                                      {candidatesLabel}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              <div
+                                className={`flex flex-col gap-3 sm:flex-row sm:items-center ${
+                                  salaryLabel
+                                    ? "sm:justify-between"
+                                    : "sm:justify-end"
+                                }`}
+                              >
+                                {salaryLabel && (
+                                  <p className="text-base font-medium text-slate-700">
+                                    {salaryLabel}
+                                  </p>
+                                )}
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleNavigateToCandidates(job)
+                                    }
+                                    className="inline-flex w-full items-center justify-center rounded-xl bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 sm:w-auto sm:min-w-[160px]"
+                                  >
+                                    Manage Candidates
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedJob(job);
+                                      setIsJobModalOpen(true);
+                                    }}
+                                    className="inline-flex w-full items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500 sm:w-auto sm:min-w-[160px]"
+                                  >
+                                    Manage Job
+                                  </button>
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {hasFilteredInactiveJobs && (
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-slate-900">
+                          Inactive Jobs
+                        </h2>
+                        <span className="text-sm font-medium text-slate-500">
+                          {filteredInactiveJobs.length} inactive
+                        </span>
+                      </div>
+                      <div className="mt-4 flex flex-col gap-6">
+                        {filteredInactiveJobs.map((job) => {
+                          const title =
+                            job.formValues.jobName?.trim() || "Untitled job";
+                          const jobTypeValue = job.formValues.jobType?.trim();
+                          const jobTypeLabel = jobTypeValue
+                            ? JOB_TYPE_LABELS[jobTypeValue] || jobTypeValue
+                            : "";
+                          const candidatesValue =
+                            job.formValues.candidatesNeeded?.trim() || "";
+                          const candidatesLabel = candidatesValue
+                            ? `${candidatesValue} candidate${
+                                candidatesValue === "1" ? "" : "s"
+                              } needed`
+                            : "";
+                          const salaryLabel = buildSalaryLabel(job.formValues);
+                          const formattedDate = formatDate(
+                            job.publishedAt ?? job.savedAt
+                          );
+                          const applicationCount = candidates.filter(
+                            (c) => c.jobId === job.id
+                          ).length;
+                          const applicationLabel =
+                            applicationCount === 1
+                              ? "1 application"
+                              : `${applicationCount} applications`;
+
+                          return (
+                            <article
+                              key={job.id}
+                              className="flex flex-col gap-4 rounded-2xl border border-rose-100 bg-white p-6 shadow-md transition hover:shadow-md"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-3">
+                                  <span className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
+                                    Inactive
                                   </span>
                                   <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                                     started on {formattedDate}
@@ -517,16 +669,27 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                     {salaryLabel}
                                   </p>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedJob(draft);
-                                    setIsJobModalOpen(true);
-                                  }}
-                                  className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500"
-                                >
-                                  Manage Job
-                                </button>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleNavigateToCandidates(draft)
+                                    }
+                                    className="inline-flex w-full items-center justify-center rounded-xl bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 sm:w-auto sm:min-w-[160px]"
+                                  >
+                                    Manage Candidates
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedJob(draft);
+                                      setIsJobModalOpen(true);
+                                    }}
+                                    className="inline-flex w-full items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500 sm:w-auto sm:min-w-[160px]"
+                                  >
+                                    Manage Job
+                                  </button>
+                                </div>
                               </div>
                             </article>
                           );
@@ -617,6 +780,7 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onDraftDeleted={(draftId) => {
           setDraftJobs((prev) => prev.filter((draft) => draft.id !== draftId));
           setActiveJobs((prev) => prev.filter((job) => job.id !== draftId));
+          setInactiveJobs((prev) => prev.filter((job) => job.id !== draftId));
           setSelectedJob(null);
         }}
       />

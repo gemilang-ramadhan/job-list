@@ -6,7 +6,7 @@ export type ProfileField = {
   requirement: FieldRequirement;
 };
 
-export type JobStatus = "draft" | "active";
+export type JobStatus = "draft" | "active" | "inactive";
 
 export type StoredJob = {
   id: string;
@@ -50,7 +50,9 @@ const parseJobs = (value: string | null): StoredJob[] => {
         const candidate = item as StoredJob;
         return (
           typeof candidate.id === "string" &&
-          (candidate.status === "draft" || candidate.status === "active")
+          (candidate.status === "draft" ||
+            candidate.status === "active" ||
+            candidate.status === "inactive")
         );
       })
       .sort(
@@ -68,6 +70,10 @@ export const parseDraftJobs = (value: string | null): StoredJob[] => {
 
 export const parseActiveJobs = (value: string | null): StoredJob[] => {
   return parseJobs(value).filter((job) => job.status === "active");
+};
+
+export const parseInactiveJobs = (value: string | null): StoredJob[] => {
+  return parseJobs(value).filter((job) => job.status === "inactive");
 };
 
 export const parseAllJobs = (value: string | null): StoredJob[] => {

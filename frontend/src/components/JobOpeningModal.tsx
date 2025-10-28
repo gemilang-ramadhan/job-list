@@ -92,6 +92,7 @@ function JobOpeningModal({
 
   const isEditingExisting = Boolean(initialDraft);
   const isEditingActive = initialDraft?.status === "active";
+  const isEditingInactive = initialDraft?.status === "inactive";
   const editingDraftId = initialDraft?.id ?? null;
 
   const generateDraftId = (date: Date) => {
@@ -263,6 +264,22 @@ function JobOpeningModal({
     onClose();
   };
 
+  const handleMarkAsInactiveClick = () => {
+    if (!isFormComplete) return;
+    persistJob("inactive", {
+      onDraftSavedOptions: { isActiveUpdate: true },
+    });
+    onClose();
+  };
+
+  const handleMarkAsActiveClick = () => {
+    if (!isFormComplete) return;
+    persistJob("active", {
+      onDraftSavedOptions: { isActiveUpdate: true },
+    });
+    onClose();
+  };
+
   const handlePublishJobClick = () => {
     if (!isFormComplete) return;
     persistJob("active", {
@@ -406,29 +423,62 @@ function JobOpeningModal({
             onClick={handleDeleteDraftClick}
             className="w-full rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-200 sm:w-auto"
           >
-            {isEditingActive ? "Delete Job" : "Delete Draft"}
+            {isEditingActive || isEditingInactive
+              ? "Delete Job"
+              : "Delete Draft"}
           </button>
           <button
             type="button"
             onClick={
-              isEditingActive ? handleSaveAsDraftClick : handleSaveDraftClick
+              isEditingActive || isEditingInactive
+                ? handleSaveAsDraftClick
+                : handleSaveDraftClick
             }
             className="w-full rounded-xl bg-amber-400 px-6 py-3 text-sm font-semibold text-slate-800 shadow transition hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 sm:w-auto"
           >
-            {isEditingActive ? "Save As Draft" : "Save Draft"}
+            {isEditingActive || isEditingInactive
+              ? "Save As Draft"
+              : "Save Draft"}
           </button>
           {isEditingActive ? (
+            <>
+              <button
+                type="button"
+                disabled={!isFormComplete}
+                onClick={handleMarkAsInactiveClick}
+                className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto sm:min-w-[180px] ${
+                  isFormComplete
+                    ? "bg-rose-500 text-white shadow hover:bg-rose-600 focus-visible:outline-rose-500"
+                    : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
+                }`}
+              >
+                Mark as Inactive
+              </button>
+              <button
+                type="button"
+                disabled={!isFormComplete}
+                onClick={handleSaveActiveChangesClick}
+                className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto sm:min-w-[180px] ${
+                  isFormComplete
+                    ? "bg-sky-500 text-white shadow hover:bg-sky-600 focus-visible:outline-sky-500"
+                    : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
+                }`}
+              >
+                Save Changes
+              </button>
+            </>
+          ) : isEditingInactive ? (
             <button
               type="button"
               disabled={!isFormComplete}
-              onClick={handleSaveActiveChangesClick}
+              onClick={handleMarkAsActiveClick}
               className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-auto sm:min-w-[180px] ${
                 isFormComplete
-                  ? "bg-sky-500 text-white shadow hover:bg-sky-600 focus-visible:outline-sky-500"
+                  ? "bg-emerald-500 text-white shadow hover:bg-emerald-600 focus-visible:outline-emerald-500"
                   : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
               }`}
             >
-              Save Changes
+              Mark as Active
             </button>
           ) : (
             <button
@@ -777,10 +827,12 @@ function JobOpeningModal({
           >
             <div className="px-6 py-6">
               <h3 className="text-lg font-semibold text-slate-900">
-                {isEditingActive ? "Delete Job" : "Delete Draft"}
+                {isEditingActive || isEditingInactive
+                  ? "Delete Job"
+                  : "Delete Draft"}
               </h3>
               <p className="mt-2 text-sm text-slate-500">
-                {isEditingActive
+                {isEditingActive || isEditingInactive
                   ? "This job will be removed permanently. Are you sure you want to continue?"
                   : "This draft will be removed permanently. Are you sure you want to continue?"}
               </p>
@@ -798,7 +850,9 @@ function JobOpeningModal({
                 onClick={handleCancelDelete}
                 className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-200"
               >
-                {isEditingActive ? "No, keep job" : "No, keep draft"}
+                {isEditingActive || isEditingInactive
+                  ? "No, keep job"
+                  : "No, keep draft"}
               </button>
             </div>
           </div>
