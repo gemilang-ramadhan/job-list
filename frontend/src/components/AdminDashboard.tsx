@@ -3,6 +3,8 @@ import {
   faCircleUser,
   faUserTie,
   faSearch,
+  faChevronDown,
+  faArrowUpWideShort,
 } from "@fortawesome/free-solid-svg-icons";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -86,8 +88,16 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [statusFilter, setStatusFilter] = useState<
     "all" | "active" | "inactive" | "draft"
   >("all");
+  const [sortBy, setSortBy] = useState<
+    "recent" | "oldest" | "highest-applicants"
+  >("recent");
+  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const sortButtonDesktopRef = useRef<HTMLButtonElement>(null);
+  const sortDropdownDesktopRef = useRef<HTMLDivElement>(null);
+  const sortButtonMobileRef = useRef<HTMLButtonElement>(null);
+  const sortDropdownMobileRef = useRef<HTMLDivElement>(null);
   const [notification, setNotification] = useState<{
     key: number;
     message: string;
@@ -138,19 +148,31 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (!isMenuOpen) return;
       const target = event.target as Node;
-      if (
-        !profileButtonRef.current?.contains(target) &&
-        !menuRef.current?.contains(target)
-      ) {
-        setIsMenuOpen(false);
+      if (isMenuOpen) {
+        if (
+          !profileButtonRef.current?.contains(target) &&
+          !menuRef.current?.contains(target)
+        ) {
+          setIsMenuOpen(false);
+        }
+      }
+      if (isSortDropdownOpen) {
+        if (
+          !sortButtonDesktopRef.current?.contains(target) &&
+          !sortDropdownDesktopRef.current?.contains(target) &&
+          !sortButtonMobileRef.current?.contains(target) &&
+          !sortDropdownMobileRef.current?.contains(target)
+        ) {
+          setIsSortDropdownOpen(false);
+        }
       }
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsMenuOpen(false);
+        setIsSortDropdownOpen(false);
       }
     }
 
@@ -160,7 +182,7 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
       window.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [isMenuOpen]);
+  }, [isMenuOpen, isSortDropdownOpen]);
 
   const handleLogout = () => {
     setIsMenuOpen(false);
@@ -240,9 +262,41 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
     });
   };
 
-  const filteredActiveJobs = filterJobsByName(activeJobs);
-  const filteredInactiveJobs = filterJobsByName(inactiveJobs);
-  const filteredDraftJobs = filterJobsByName(draftJobs);
+  const sortJobs = (jobs: StoredJob[]) => {
+    const jobsWithApplicants = jobs.map((job) => ({
+      job,
+      applicantCount: candidates.filter((c) => c.jobId === job.id).length,
+    }));
+
+    if (sortBy === "oldest") {
+      return jobsWithApplicants
+        .sort((a, b) => {
+          const dateA = new Date(a.job.publishedAt ?? a.job.savedAt).getTime();
+          const dateB = new Date(b.job.publishedAt ?? b.job.savedAt).getTime();
+          return dateA - dateB;
+        })
+        .map((item) => item.job);
+    }
+
+    if (sortBy === "highest-applicants") {
+      return jobsWithApplicants
+        .sort((a, b) => b.applicantCount - a.applicantCount)
+        .map((item) => item.job);
+    }
+
+    // Default: recent (newest first)
+    return jobsWithApplicants
+      .sort((a, b) => {
+        const dateA = new Date(a.job.publishedAt ?? a.job.savedAt).getTime();
+        const dateB = new Date(b.job.publishedAt ?? b.job.savedAt).getTime();
+        return dateB - dateA;
+      })
+      .map((item) => item.job);
+  };
+
+  const filteredActiveJobs = sortJobs(filterJobsByName(activeJobs));
+  const filteredInactiveJobs = sortJobs(filterJobsByName(inactiveJobs));
+  const filteredDraftJobs = sortJobs(filterJobsByName(draftJobs));
 
   const shouldShowActiveSection =
     statusFilter === "all" || statusFilter === "active";
@@ -334,51 +388,133 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 />
               </div>
 
-              <div className="hidden md:flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("all")}
-                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
-                    statusFilter === "all"
-                      ? "bg-sky-500 text-white shadow-sm"
-                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("active")}
-                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
-                    statusFilter === "active"
-                      ? "bg-emerald-500 text-white shadow-sm"
-                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  Active
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("inactive")}
-                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
-                    statusFilter === "inactive"
-                      ? "bg-rose-500 text-white shadow-sm"
-                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  Inactive
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("draft")}
-                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
-                    statusFilter === "draft"
-                      ? "bg-amber-400 text-slate-900 shadow-sm"
-                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  Draft
-                </button>
+              <div className="hidden md:flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("all")}
+                    className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      statusFilter === "all"
+                        ? "bg-sky-500 text-white shadow-sm"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("active")}
+                    className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      statusFilter === "active"
+                        ? "bg-emerald-500 text-white shadow-sm"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("inactive")}
+                    className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      statusFilter === "inactive"
+                        ? "bg-rose-500 text-white shadow-sm"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    Inactive
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("draft")}
+                    className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      statusFilter === "draft"
+                        ? "bg-amber-400 text-slate-900 shadow-sm"
+                        : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    Draft
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <button
+                    ref={sortButtonDesktopRef}
+                    type="button"
+                    onClick={() => setIsSortDropdownOpen((prev) => !prev)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200"
+                    aria-label="Sort jobs"
+                    aria-expanded={isSortDropdownOpen}
+                  >
+                    <FontAwesomeIcon
+                      icon={faArrowUpWideShort}
+                      className="h-4 w-4"
+                    />
+                    <span>
+                      Sort by:{" "}
+                      {sortBy === "recent"
+                        ? "Recent"
+                        : sortBy === "oldest"
+                        ? "Oldest"
+                        : "Highest Applicants"}
+                    </span>
+                    <FontAwesomeIcon
+                      icon={faChevronDown}
+                      className={`h-3 w-3 transition-transform ${
+                        isSortDropdownOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {isSortDropdownOpen && (
+                    <div
+                      ref={sortDropdownDesktopRef}
+                      className="absolute left-0 top-full mt-2 w-56 overflow-hidden rounded-xl border border-slate-100 bg-white shadow-lg z-50"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortBy("recent");
+                          setIsSortDropdownOpen(false);
+                        }}
+                        className={`flex w-full items-center px-4 py-2.5 text-sm font-medium transition ${
+                          sortBy === "recent"
+                            ? "bg-sky-50 text-sky-600"
+                            : "text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        Sort by Recent
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortBy("oldest");
+                          setIsSortDropdownOpen(false);
+                        }}
+                        className={`flex w-full items-center px-4 py-2.5 text-sm font-medium transition ${
+                          sortBy === "oldest"
+                            ? "bg-sky-50 text-sky-600"
+                            : "text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        Sort by Oldest
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortBy("highest-applicants");
+                          setIsSortDropdownOpen(false);
+                        }}
+                        className={`flex w-full items-center px-4 py-2.5 text-sm font-medium transition ${
+                          sortBy === "highest-applicants"
+                            ? "bg-sky-50 text-sky-600"
+                            : "text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        Highest Applicants
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="lg:hidden sticky top-0 z-40 bg-white pt-4 pb-2 -mt-2">
@@ -396,51 +532,133 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
               {hasAnyJobs ? (
                 <section className="flex flex-col gap-10">
-                  <div className="md:hidden flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter("all")}
-                      className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
-                        statusFilter === "all"
-                          ? "bg-sky-500 text-white shadow-sm"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter("active")}
-                      className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
-                        statusFilter === "active"
-                          ? "bg-emerald-500 text-white shadow-sm"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      Active
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter("inactive")}
-                      className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
-                        statusFilter === "inactive"
-                          ? "bg-rose-500 text-white shadow-sm"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      Inactive
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter("draft")}
-                      className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
-                        statusFilter === "draft"
-                          ? "bg-amber-400 text-slate-900 shadow-sm"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      Draft
-                    </button>
+                  <div className="md:hidden flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilter("all")}
+                        className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                          statusFilter === "all"
+                            ? "bg-sky-500 text-white shadow-sm"
+                            : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilter("active")}
+                        className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                          statusFilter === "active"
+                            ? "bg-emerald-500 text-white shadow-sm"
+                            : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        Active
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilter("inactive")}
+                        className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                          statusFilter === "inactive"
+                            ? "bg-rose-500 text-white shadow-sm"
+                            : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        Inactive
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilter("draft")}
+                        className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                          statusFilter === "draft"
+                            ? "bg-amber-400 text-slate-900 shadow-sm"
+                            : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        Draft
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <button
+                        ref={sortButtonMobileRef}
+                        type="button"
+                        onClick={() => setIsSortDropdownOpen((prev) => !prev)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-200"
+                        aria-label="Sort jobs"
+                        aria-expanded={isSortDropdownOpen}
+                      >
+                        <FontAwesomeIcon
+                          icon={faArrowUpWideShort}
+                          className="h-4 w-4"
+                        />
+                        <span>
+                          Sort by:{" "}
+                          {sortBy === "recent"
+                            ? "Recent"
+                            : sortBy === "oldest"
+                            ? "Oldest"
+                            : "Highest Applicants"}
+                        </span>
+                        <FontAwesomeIcon
+                          icon={faChevronDown}
+                          className={`h-3 w-3 transition-transform ${
+                            isSortDropdownOpen ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {isSortDropdownOpen && (
+                        <div
+                          ref={sortDropdownMobileRef}
+                          className="absolute left-0 top-full mt-2 w-56 overflow-hidden rounded-xl border border-slate-100 bg-white shadow-lg z-50"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSortBy("recent");
+                              setIsSortDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center px-4 py-2.5 text-sm font-medium transition ${
+                              sortBy === "recent"
+                                ? "bg-sky-50 text-sky-600"
+                                : "text-slate-600 hover:bg-slate-50"
+                            }`}
+                          >
+                            Sort by Recent
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSortBy("oldest");
+                              setIsSortDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center px-4 py-2.5 text-sm font-medium transition ${
+                              sortBy === "oldest"
+                                ? "bg-sky-50 text-sky-600"
+                                : "text-slate-600 hover:bg-slate-50"
+                            }`}
+                          >
+                            Sort by Oldest
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSortBy("highest-applicants");
+                              setIsSortDropdownOpen(false);
+                            }}
+                            className={`flex w-full items-center px-4 py-2.5 text-sm font-medium transition ${
+                              sortBy === "highest-applicants"
+                                ? "bg-sky-50 text-sky-600"
+                                : "text-slate-600 hover:bg-slate-50"
+                            }`}
+                          >
+                            Highest Applicants
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {hasFilteredActiveJobs && (
