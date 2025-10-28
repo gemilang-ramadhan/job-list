@@ -42,13 +42,6 @@ All data persists in browser `localStorage` with no backend dependency, making i
 - **jsPDF-AutoTable** - Table formatting for PDF exports
 - **SheetJS (xlsx)** - Excel file generation for candidate exports
 
-### Testing
-
-- **Vitest** - Fast unit test framework
-- **Testing Library (React)** - React component testing utilities
-- **User Event** - User interaction simulation
-- **jsdom** - DOM environment for Node.js testing
-
 ### Build & Development Tools
 
 - **ESLint** - Code linting and quality
@@ -125,9 +118,7 @@ The application uses role-based authentication with two pre-configured accounts:
 
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
-- `npm run preview` - Preview production build locally
 - `npm run lint` - Run ESLint
-- `npm run test` - Run tests with Vitest
 
 ### Key Features
 

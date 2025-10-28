@@ -16,6 +16,7 @@ import {
   faChevronLeft,
   faChevronRight,
   faTimes,
+  faExclamationTriangle,
 } from "@fortawesome/free-solid-svg-icons";
 import { Hands } from "@mediapipe/hands";
 import {
@@ -46,6 +47,17 @@ type ApplyFormState = {
   photoProfile: string;
 };
 
+type FormErrors = {
+  fullName: string;
+  dateOfBirth: string;
+  pronoun: string;
+  phoneNumber: string;
+  email: string;
+  linkedin: string;
+  photoProfile: string;
+  domicile: string;
+};
+
 const initialFormState: ApplyFormState = {
   fullName: "",
   dateOfBirth: "",
@@ -54,6 +66,17 @@ const initialFormState: ApplyFormState = {
   email: "",
   linkedin: "",
   photoProfile: "",
+};
+
+const initialFormErrors: FormErrors = {
+  fullName: "",
+  dateOfBirth: "",
+  pronoun: "",
+  phoneNumber: "",
+  email: "",
+  linkedin: "",
+  photoProfile: "",
+  domicile: "",
 };
 
 const COUNTRY_OPTIONS = [
@@ -177,6 +200,7 @@ function ApplyJobModal({
   onClose,
 }: ApplyJobModalProps) {
   const [formState, setFormState] = useState<ApplyFormState>(initialFormState);
+  const [formErrors, setFormErrors] = useState<FormErrors>(initialFormErrors);
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_OPTIONS[0]);
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
@@ -272,6 +296,7 @@ function ApplyJobModal({
   useEffect(() => {
     if (isOpen) {
       setFormState(initialFormState);
+      setFormErrors(initialFormErrors);
       setSelectedCountry(COUNTRY_OPTIONS[0]);
       setCountrySearch("");
       setSelectedDomicile(DOMICILE_OPTIONS[0]);
@@ -338,6 +363,11 @@ function ApplyJobModal({
   ) => {
     const { name, value } = event.target;
 
+    // Clear error for this field when user starts typing
+    if (name in formErrors) {
+      setFormErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+
     // Strip country code from phone number input
     if (name === "phoneNumber") {
       const strippedValue = stripCountryCode(value);
@@ -359,40 +389,61 @@ function ApplyJobModal({
     return field?.requirement !== "Off";
   };
 
-  const isFormComplete = useMemo(() => {
-    const checks: Record<string, boolean> = {};
-
-    if (isFieldRequired("full_name")) {
-      checks.full_name = formState.fullName.trim() !== "";
-    }
-    if (isFieldRequired("photo_profile")) {
-      checks.photo_profile = formState.photoProfile.trim() !== "";
-    }
-    if (isFieldRequired("date_of_birth")) {
-      checks.date_of_birth = formState.dateOfBirth.trim() !== "";
-    }
-    if (isFieldRequired("gender")) {
-      checks.gender = formState.pronoun.trim() !== "";
-    }
-    if (isFieldRequired("domicile")) {
-      checks.domicile = selectedDomicile.id !== "";
-    }
-    if (isFieldRequired("phone_number")) {
-      checks.phone_number = formState.phoneNumber.trim() !== "";
-    }
-    if (isFieldRequired("email")) {
-      checks.email = formState.email.trim() !== "";
-    }
-    if (isFieldRequired("linkedin_link")) {
-      checks.linkedin_link = formState.linkedin.trim() !== "";
-    }
-
-    return Object.values(checks).every((isValid) => isValid);
-  }, [formState, selectedDomicile, profileFields]);
-
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!isFormComplete) return;
+    // Validate all required fields and collect errors
+    const errors: FormErrors = {
+      fullName: "",
+      dateOfBirth: "",
+      pronoun: "",
+      phoneNumber: "",
+      email: "",
+      linkedin: "",
+      photoProfile: "",
+      domicile: "",
+    };
+
+    if (isFieldRequired("full_name") && formState.fullName.trim() === "") {
+      errors.fullName = "Nama lengkap tidak boleh kosong";
+    }
+    if (
+      isFieldRequired("photo_profile") &&
+      formState.photoProfile.trim() === ""
+    ) {
+      errors.photoProfile = "Foto profil tidak boleh kosong";
+    }
+    if (
+      isFieldRequired("date_of_birth") &&
+      formState.dateOfBirth.trim() === ""
+    ) {
+      errors.dateOfBirth = "Tanggal lahir tidak boleh kosong";
+    }
+    if (isFieldRequired("gender") && formState.pronoun.trim() === "") {
+      errors.pronoun = "Jenis kelamin tidak boleh kosong";
+    }
+    if (isFieldRequired("domicile") && selectedDomicile.id === "") {
+      errors.domicile = "Domisili tidak boleh kosong";
+    }
+    if (
+      isFieldRequired("phone_number") &&
+      formState.phoneNumber.trim() === ""
+    ) {
+      errors.phoneNumber = "Nomor telepon tidak boleh kosong";
+    }
+    if (isFieldRequired("email") && formState.email.trim() === "") {
+      errors.email = "Alamat email tidak boleh kosong";
+    }
+    if (isFieldRequired("linkedin_link") && formState.linkedin.trim() === "") {
+      errors.linkedin = "Link LinkedIn tidak boleh kosong";
+    }
+
+    // Check if there are any errors
+    const hasErrors = Object.values(errors).some((error) => error !== "");
+    if (hasErrors) {
+      setFormErrors(errors);
+      return;
+    }
+
     const normalizedJobId = jobId.trim();
     if (!normalizedJobId) return;
 
@@ -1334,6 +1385,15 @@ function ApplyJobModal({
                       </button>
                     </div>
                   </div>
+                  {formErrors.photoProfile && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-red-500">
+                      <FontAwesomeIcon
+                        icon={faExclamationTriangle}
+                        className="h-4 w-4"
+                      />
+                      <span>{formErrors.photoProfile}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1346,14 +1406,37 @@ function ApplyJobModal({
                         <span className="text-rose-500">*</span>
                       )}
                     </div>
-                    <input
-                      type="text"
-                      name="fullName"
-                      value={formState.fullName}
-                      onChange={handleInputChange}
-                      placeholder="Enter your full name"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="fullName"
+                        value={formState.fullName}
+                        onChange={handleInputChange}
+                        placeholder="Enter your full name"
+                        className={`w-full rounded-xl border px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
+                          formErrors.fullName
+                            ? "border-red-400 focus:border-red-400 focus:ring-red-100"
+                            : "border-slate-200 focus:border-sky-400 focus:ring-sky-200"
+                        }`}
+                      />
+                      {formErrors.fullName && (
+                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2">
+                          <FontAwesomeIcon
+                            icon={faExclamationTriangle}
+                            className="h-4 w-4 text-red-400"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {formErrors.fullName && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-red-500">
+                        <FontAwesomeIcon
+                          icon={faExclamationTriangle}
+                          className="h-4 w-4"
+                        />
+                        <span>{formErrors.fullName}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1393,9 +1476,15 @@ function ApplyJobModal({
                             }
                             return next;
                           });
+                          setFormErrors((prev) => ({
+                            ...prev,
+                            dateOfBirth: "",
+                          }));
                         }}
                         className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                          isDobPickerOpen
+                          formErrors.dateOfBirth
+                            ? "border-red-400 focus-visible:outline-red-200"
+                            : isDobPickerOpen
                             ? "border-sky-400 focus-visible:outline-sky-200"
                             : "border-slate-200 focus-visible:outline-sky-200"
                         } ${
@@ -1405,10 +1494,18 @@ function ApplyJobModal({
                         aria-expanded={isDobPickerOpen}
                       >
                         <span>{dobDisplayLabel}</span>
-                        <FontAwesomeIcon
-                          icon={faChevronDown}
-                          className="ml-2 h-4 w-4 text-slate-400"
-                        />
+                        <div className="flex items-center gap-2">
+                          {formErrors.dateOfBirth && (
+                            <FontAwesomeIcon
+                              icon={faExclamationTriangle}
+                              className="h-4 w-4 text-red-400"
+                            />
+                          )}
+                          <FontAwesomeIcon
+                            icon={faChevronDown}
+                            className="h-4 w-4 text-slate-400"
+                          />
+                        </div>
                       </button>
                       {isDobPickerOpen && (
                         <div className="absolute left-0 top-full z-20 mt-3 w-full rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_25px_60px_-35px_rgba(15,23,42,0.45)]">
@@ -1586,6 +1683,15 @@ function ApplyJobModal({
                         </div>
                       )}
                     </div>
+                    {formErrors.dateOfBirth && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-red-500">
+                        <FontAwesomeIcon
+                          icon={faExclamationTriangle}
+                          className="h-4 w-4"
+                        />
+                        <span>{formErrors.dateOfBirth}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1597,7 +1703,13 @@ function ApplyJobModal({
                         <span className="text-rose-500">*</span>
                       )}
                     </div>
-                    <fieldset className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+                    <fieldset
+                      className={`rounded-2xl border bg-white px-5 py-4 ${
+                        formErrors.pronoun
+                          ? "border-red-400"
+                          : "border-slate-200"
+                      }`}
+                    >
                       <legend className="sr-only">Pronoun (gender)</legend>
                       <div className="flex flex-wrap items-center gap-4">
                         <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
@@ -1622,6 +1734,15 @@ function ApplyJobModal({
                           />
                           He/him (Male)
                         </label>
+                        {formErrors.pronoun && (
+                          <div className="flex w-full items-center gap-2 text-sm text-red-500">
+                            <FontAwesomeIcon
+                              icon={faExclamationTriangle}
+                              className="h-4 w-4"
+                            />
+                            <span>{formErrors.pronoun}</span>
+                          </div>
+                        )}
                       </div>
                     </fieldset>
                   </div>
@@ -1637,14 +1758,22 @@ function ApplyJobModal({
                     </div>
                     <div
                       ref={domicileDropdownRef}
-                      className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+                      className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 ${
+                        formErrors.domicile
+                          ? "border-red-400"
+                          : "border-slate-200"
+                      }`}
                     >
                       <div className="relative flex-1">
                         <button
                           type="button"
-                          onClick={() =>
-                            setIsDomicileDropdownOpen((previous) => !previous)
-                          }
+                          onClick={() => {
+                            setIsDomicileDropdownOpen((previous) => !previous);
+                            setFormErrors((prev) => ({
+                              ...prev,
+                              domicile: "",
+                            }));
+                          }}
                           className="flex w-full items-center justify-between text-left text-sm text-slate-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200 focus-visible:rounded-md"
                           aria-haspopup="listbox"
                           aria-expanded={isDomicileDropdownOpen}
@@ -1657,10 +1786,18 @@ function ApplyJobModal({
                           >
                             {selectedDomicile.label}
                           </span>
-                          <FontAwesomeIcon
-                            icon={faChevronDown}
-                            className="ml-2 h-4 w-4 text-slate-400"
-                          />
+                          <div className="flex items-center gap-2">
+                            {formErrors.domicile && (
+                              <FontAwesomeIcon
+                                icon={faExclamationTriangle}
+                                className="h-4 w-4 text-red-400"
+                              />
+                            )}
+                            <FontAwesomeIcon
+                              icon={faChevronDown}
+                              className="h-4 w-4 text-slate-400"
+                            />
+                          </div>
                         </button>
                         {isDomicileDropdownOpen && (
                           <ul
@@ -1693,6 +1830,15 @@ function ApplyJobModal({
                         )}
                       </div>
                     </div>
+                    {formErrors.domicile && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-red-500">
+                        <FontAwesomeIcon
+                          icon={faExclamationTriangle}
+                          className="h-4 w-4"
+                        />
+                        <span>{formErrors.domicile}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1706,7 +1852,11 @@ function ApplyJobModal({
                     </div>
                     <div
                       ref={countryDropdownRef}
-                      className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+                      className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 ${
+                        formErrors.phoneNumber
+                          ? "border-red-400"
+                          : "border-slate-200"
+                      }`}
                     >
                       <div className="relative">
                         <button
@@ -1799,15 +1949,34 @@ function ApplyJobModal({
                           </div>
                         )}
                       </div>
-                      <input
-                        type="tel"
-                        name="phoneNumber"
-                        value={formState.phoneNumber}
-                        onChange={handleInputChange}
-                        placeholder="81212345678"
-                        className="h-10 flex-1 border-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                      />
+                      <div className="relative flex-1">
+                        <input
+                          type="tel"
+                          name="phoneNumber"
+                          value={formState.phoneNumber}
+                          onChange={handleInputChange}
+                          placeholder="81212345678"
+                          className="h-10 w-full border-none bg-transparent pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                        />
+                        {formErrors.phoneNumber && (
+                          <div className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2">
+                            <FontAwesomeIcon
+                              icon={faExclamationTriangle}
+                              className="h-4 w-4 text-red-400"
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
+                    {formErrors.phoneNumber && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-red-500">
+                        <FontAwesomeIcon
+                          icon={faExclamationTriangle}
+                          className="h-4 w-4"
+                        />
+                        <span>{formErrors.phoneNumber}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1819,14 +1988,37 @@ function ApplyJobModal({
                         <span className="text-rose-500">*</span>
                       )}
                     </div>
-                    <input
-                      type="email"
-                      name="email"
-                      value={formState.email}
-                      onChange={handleInputChange}
-                      placeholder="Enter your email address"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                    />
+                    <div className="relative">
+                      <input
+                        type="email"
+                        name="email"
+                        value={formState.email}
+                        onChange={handleInputChange}
+                        placeholder="Enter your email address"
+                        className={`w-full rounded-xl border px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
+                          formErrors.email
+                            ? "border-red-400 focus:border-red-400 focus:ring-red-100"
+                            : "border-slate-200 focus:border-sky-400 focus:ring-sky-200"
+                        }`}
+                      />
+                      {formErrors.email && (
+                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2">
+                          <FontAwesomeIcon
+                            icon={faExclamationTriangle}
+                            className="h-4 w-4 text-red-400"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {formErrors.email && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-red-500">
+                        <FontAwesomeIcon
+                          icon={faExclamationTriangle}
+                          className="h-4 w-4"
+                        />
+                        <span>{formErrors.email}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1838,14 +2030,37 @@ function ApplyJobModal({
                         <span className="text-rose-500">*</span>
                       )}
                     </div>
-                    <input
-                      type="url"
-                      name="linkedin"
-                      value={formState.linkedin}
-                      onChange={handleInputChange}
-                      placeholder="https://linkedin.com/in/username"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                    />
+                    <div className="relative">
+                      <input
+                        type="url"
+                        name="linkedin"
+                        value={formState.linkedin}
+                        onChange={handleInputChange}
+                        placeholder="https://linkedin.com/in/username"
+                        className={`w-full rounded-xl border px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 ${
+                          formErrors.linkedin
+                            ? "border-red-400 focus:border-red-400 focus:ring-red-100"
+                            : "border-slate-200 focus:border-sky-400 focus:ring-sky-200"
+                        }`}
+                      />
+                      {formErrors.linkedin && (
+                        <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2">
+                          <FontAwesomeIcon
+                            icon={faExclamationTriangle}
+                            className="h-4 w-4 text-red-400"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {formErrors.linkedin && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-red-500">
+                        <FontAwesomeIcon
+                          icon={faExclamationTriangle}
+                          className="h-4 w-4"
+                        />
+                        <span>{formErrors.linkedin}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1855,12 +2070,7 @@ function ApplyJobModal({
           <div className="border-t border-slate-100 bg-white px-8 py-4">
             <button
               type="submit"
-              disabled={!isFormComplete}
-              className={`w-full rounded-xl px-6 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                isFormComplete
-                  ? "bg-sky-500 text-white shadow hover:bg-sky-600 focus-visible:outline-sky-500"
-                  : "cursor-not-allowed bg-slate-200 text-slate-400 focus-visible:outline-slate-300"
-              }`}
+              className="w-full rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow transition hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
             >
               Submit
             </button>
