@@ -2081,23 +2081,26 @@ function ApplyJobModal({
       {/* Camera Modal */}
       {isCameraOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               handleCloseCameraModal();
             }
           }}
         >
-          <div className="relative flex h-[75vh] w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl rounded-2xl">
+          <div
+            className="relative flex w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl rounded-2xl"
+            style={{ maxHeight: "calc(100vh - 2rem)" }}
+          >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4 flex-shrink-0">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">
+                <h3 className="text-sm md:text-lg font-semibold text-slate-900">
                   Raise Your Hand to Capture
                 </h3>
-                <p className="mt-1 text-xs text-slate-500">
+                {/* <p className="mt-1 text-xs text-slate-500">
                   Follow the finger sequence to trigger an automatic snapshot.
-                </p>
+                </p> */}
               </div>
               <button
                 type="button"
@@ -2110,7 +2113,10 @@ function ApplyJobModal({
             </div>
 
             {/* Camera/Preview Area */}
-            <div className="relative flex-1 w-full bg-slate-900">
+            <div
+              className="relative w-full bg-slate-900 flex-shrink-0 overflow-hidden"
+              style={{ height: "min(400px, 50vh)" }}
+            >
               {!capturedPhoto ? (
                 <>
                   <video
@@ -2158,7 +2164,7 @@ function ApplyJobModal({
             </div>
 
             {/* Instructions & Actions */}
-            <div className="border-t border-slate-100 bg-white px-6 py-5">
+            <div className="border-t border-slate-100 bg-white px-4 py-4 sm:px-6 sm:py-5 flex-shrink-0 overflow-y-auto">
               {cameraError ? (
                 <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
                   {cameraError}
@@ -2170,23 +2176,23 @@ function ApplyJobModal({
                     <p className="text-center text-sm text-slate-600">
                       {poseFeedback}
                     </p>
-                    <div className="mx-auto h-2 w-full max-w-md rounded-full bg-slate-200">
+                    <div className="mx-auto h-1.5 w-full max-w-md rounded-full bg-slate-200">
                       <div
                         className="h-full rounded-full bg-sky-500 transition-all duration-200"
                         style={{ width: `${poseProgress}%` }}
                       ></div>
                     </div>
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center justify-between gap-2">
                       {POSE_SEQUENCE.map((pose, index) => {
                         const isCompleted = index < poseIndex;
                         const isActive = index === poseIndex;
                         return (
                           <div
                             key={pose.id}
-                            className="flex flex-1 flex-col items-center gap-2 text-center"
+                            className="flex flex-1 flex-col items-center gap-1.5 text-center"
                           >
                             <span
-                              className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold transition ${
+                              className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold transition ${
                                 isCompleted
                                   ? "border-emerald-500 bg-emerald-50 text-emerald-600"
                                   : isActive
@@ -2197,7 +2203,7 @@ function ApplyJobModal({
                               {index + 1}
                             </span>
                             <span
-                              className={`text-xs font-semibold ${
+                              className={`text-[11px] font-semibold ${
                                 isCompleted
                                   ? "text-emerald-600"
                                   : isActive
