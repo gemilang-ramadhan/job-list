@@ -4,6 +4,8 @@
 
 **Jobby** is a job management platform simulation that enables seamless job posting and application workflows. The application supports two distinct user experiences:
 
+Demo: [https://jobby-gemilang.netlify.app/]
+
 ### Admin Dashboard
 
 - Create, manage, and publish job openings
