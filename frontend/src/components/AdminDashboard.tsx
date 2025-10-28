@@ -83,6 +83,9 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [selectedJob, setSelectedJob] = useState<StoredJob | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "inactive" | "draft"
+  >("all");
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [notification, setNotification] = useState<{
@@ -240,9 +243,20 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const filteredActiveJobs = filterJobsByName(activeJobs);
   const filteredInactiveJobs = filterJobsByName(inactiveJobs);
   const filteredDraftJobs = filterJobsByName(draftJobs);
-  const hasFilteredActiveJobs = filteredActiveJobs.length > 0;
-  const hasFilteredInactiveJobs = filteredInactiveJobs.length > 0;
-  const hasFilteredDrafts = filteredDraftJobs.length > 0;
+
+  const shouldShowActiveSection =
+    statusFilter === "all" || statusFilter === "active";
+  const shouldShowInactiveSection =
+    statusFilter === "all" || statusFilter === "inactive";
+  const shouldShowDraftSection =
+    statusFilter === "all" || statusFilter === "draft";
+
+  const hasFilteredActiveJobs =
+    filteredActiveJobs.length > 0 && shouldShowActiveSection;
+  const hasFilteredInactiveJobs =
+    filteredInactiveJobs.length > 0 && shouldShowInactiveSection;
+  const hasFilteredDrafts =
+    filteredDraftJobs.length > 0 && shouldShowDraftSection;
   const hasFilteredJobs =
     hasFilteredActiveJobs || hasFilteredInactiveJobs || hasFilteredDrafts;
 
@@ -320,6 +334,53 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 />
               </div>
 
+              <div className="hidden md:flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    statusFilter === "all"
+                      ? "bg-sky-500 text-white shadow-sm"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("active")}
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    statusFilter === "active"
+                      ? "bg-emerald-500 text-white shadow-sm"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Active
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("inactive")}
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    statusFilter === "inactive"
+                      ? "bg-rose-500 text-white shadow-sm"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Inactive
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("draft")}
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    statusFilter === "draft"
+                      ? "bg-amber-400 text-slate-900 shadow-sm"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Draft
+                </button>
+              </div>
+
               <div className="lg:hidden sticky top-0 z-40 bg-white pt-4 pb-2 -mt-2">
                 <button
                   type="button"
@@ -335,6 +396,53 @@ function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
               {hasAnyJobs ? (
                 <section className="flex flex-col gap-10">
+                  <div className="md:hidden flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter("all")}
+                      className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                        statusFilter === "all"
+                          ? "bg-sky-500 text-white shadow-sm"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter("active")}
+                      className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                        statusFilter === "active"
+                          ? "bg-emerald-500 text-white shadow-sm"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      Active
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter("inactive")}
+                      className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                        statusFilter === "inactive"
+                          ? "bg-rose-500 text-white shadow-sm"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      Inactive
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter("draft")}
+                      className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                        statusFilter === "draft"
+                          ? "bg-amber-400 text-slate-900 shadow-sm"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      Draft
+                    </button>
+                  </div>
+
                   {hasFilteredActiveJobs && (
                     <div>
                       <div className="flex items-center justify-between">
