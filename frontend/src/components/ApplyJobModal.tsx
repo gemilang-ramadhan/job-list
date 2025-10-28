@@ -2088,7 +2088,7 @@ function ApplyJobModal({
             }
           }}
         >
-          <div className="relative flex h-screen w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[95vh] sm:rounded-2xl">
+          <div className="relative flex h-[75vh] w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl rounded-2xl">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <div>

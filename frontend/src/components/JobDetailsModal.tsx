@@ -115,7 +115,7 @@ function JobDetailsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 px-4 pb-10 pt-16 backdrop-blur-md sm:items-center"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-10 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-label={`Job details for ${resolvedJobTitle}`}
@@ -127,7 +127,7 @@ function JobDetailsModal({
     >
       <div
         ref={dialogRef}
-        className="flex h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl bg-white shadow-[0_40px_90px_-60px_rgba(15,23,42,0.55)]"
+        className="flex h-[75vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl bg-white shadow-[0_40px_90px_-60px_rgba(15,23,42,0.55)]"
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
           <div className="flex items-center gap-3">
